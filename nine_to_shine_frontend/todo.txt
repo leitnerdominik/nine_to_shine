@@ -1,0 +1,25 @@
+- Eigenes Bild für jeden Benutzer
+- Foto Galerie
+
+# Ideen (werden nicht zwingend umgesetzt)
+- Chronik?
+    - mit eigenen Editor?
+- billige Berechtigung einrichten, wer etwas ändern kann?
+- Style der Gesamten Seite ändern?
+
+
+# Done
+- Trip, die Tabelle durch etwas übersichtlicheres ersetzen
+- Seite die alle Trips anzeigt mit Ausgaben
+- Anzeigen wieviel der Verein Geld hat
+- "Vereinsausgaben erfassen" zurück routen nach /finance
+- Wenn ein "Spiel" bei den Finanzen ausgewählt wird, so soll das Datum dementsprechend gesetzt werden.
+- Strafen Datenbank und Felder entfernen
+- Dashboard
+- Bearbeiten/löschen der Transaktionen
+- Bezahlungen sollen nach Spiel angezeigt werden
+    - es soll für jedes Spiel eine Kachel geben, bei denen die bezahlungen enthalten sind
+    - dort sollen es aber auch die möglichkeit geben, dass man die anderen zahlungen ohne Spiel auch sieht. - woasi net ob i des moch.
+- evtl. mitloggen wer etwas in der Datenbank einträgt?
+- health check
+- Top 3 Spieler in der Rangliste evtl. mit Symbol/Icon

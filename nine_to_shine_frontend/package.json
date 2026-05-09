@@ -1,0 +1,39 @@
+{
+  "name": "namenlos-group",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@contentful/rich-text-react-renderer": "^16.0.0",
+    "@contentful/rich-text-types": "^17.0.0",
+    "@emotion/react": "^11.13.5",
+    "@emotion/styled": "^11.13.5",
+    "@hookform/resolvers": "^5.2.2",
+    "@mui/icons-material": "^6.1.10",
+    "@mui/material": "^6.1.10",
+    "axios": "^1.13.2",
+    "contentful": "^11.2.4",
+    "dayjs": "^1.11.13",
+    "firebase": "^11.1.0",
+    "next": "15.0.7",
+    "notistack": "^3.0.1",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-hook-form": "^7.66.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@netlify/plugin-nextjs": "^5.10.7",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "15.0.3",
+    "typescript": "^5"
+  }
+}

@@ -1,0 +1,53 @@
+# Build Folders (bin, obj, artifacts, etc.)
+bin/
+obj/
+publish/
+logs/
+
+android/
+artifacts/
+
+# Visual Studio temporary files, caches, and settings
+.vs
+.vscode/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.rsuser
+*.sln.docstates
+*.csproj.user
+*.vbproj.user
+
+# NuGet packages (packages can be restored, so no need to include them)
+*.nupkg
+packages/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Log files
+*.log
+
+# Local configuration and secrets
+appsettings.json
+appsettings.*.json
+!appsettings.example.json
+!appsettings.*.example.json
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+
+.idea/
+
+# Dotnet tools manifest file
+.dotnet-tools.json
