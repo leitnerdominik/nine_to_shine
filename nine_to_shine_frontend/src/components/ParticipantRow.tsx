@@ -1,12 +1,10 @@
 import {
+  Box,
   Card,
   CardContent,
+  Checkbox,
   Stack,
   Typography,
-  Divider,
-  FormControlLabel,
-  Checkbox,
-  Box,
 } from '@mui/material';
 import { Control, UseFormRegister, useWatch } from 'react-hook-form';
 import { FormInput, formatCurrency } from '../schema/trip';
@@ -16,7 +14,6 @@ interface ParticipantRowProps {
   control: Control<FormInput>;
   register: UseFormRegister<FormInput>;
   baseShare: number;
-  activityShare: number;
 }
 
 export default function ParticipantRow({
@@ -24,24 +21,17 @@ export default function ParticipantRow({
   control,
   register,
   baseShare,
-  activityShare,
 }: ParticipantRowProps) {
   const isOnTrip = useWatch({
     control,
     name: `participants.${index}.isOnTrip`,
-  });
-  const isDoingActivity = useWatch({
-    control,
-    name: `participants.${index}.isDoingActivity`,
   });
   const displayName = useWatch({
     control,
     name: `participants.${index}.displayName`,
   });
 
-  // Individuellen Anteil berechnen
-  const myTotal =
-    (isOnTrip ? baseShare : 0) + (isDoingActivity ? activityShare : 0);
+  const myTotal = isOnTrip ? baseShare : 0;
 
   return (
     <Card
@@ -53,59 +43,54 @@ export default function ParticipantRow({
         transition: 'all 0.2s ease-in-out',
       }}
     >
-      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-        <Stack spacing={1}>
-          {/* 1. Name */}
-          <Typography
-            variant="subtitle1"
-            sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}
+      <CardContent sx={{ p: 1.25, '&:last-child': { pb: 1.25 } }}>
+        <Stack
+          direction="row"
+          spacing={1.5}
+          alignItems="center"
+          justifyContent="space-between"
+        >
+          <Stack
+            direction="row"
+            spacing={1}
+            alignItems="center"
+            sx={{ minWidth: 0 }}
           >
-            {displayName}
-          </Typography>
-
-          <Divider />
-
-          {/* 2. Checkboxen (Nebeneinander) */}
-          <Stack direction="row" spacing={1} flexWrap="wrap">
-            <FormControlLabel
-              control={
-                <Checkbox
-                  {...register(`participants.${index}.isOnTrip`)}
-                  checked={!!isOnTrip}
-                />
-              }
-              label="Reise"
-              sx={{ mr: 3 }}
+            <Checkbox
+              size="small"
+              {...register(`participants.${index}.isOnTrip`)}
+              checked={!!isOnTrip}
+              sx={{ p: 0.5 }}
             />
-
-            <FormControlLabel
-              control={
-                <Checkbox
-                  {...register(`participants.${index}.isDoingActivity`)}
-                  checked={!!isDoingActivity}
-                  disabled={!isOnTrip}
-                />
-              }
-              label="Aktivität"
-            />
+            <Typography
+              variant="body1"
+              sx={{
+                fontWeight: 600,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {displayName}
+            </Typography>
           </Stack>
 
-          {/* 3. Anteil (Rechtsbündig hervorgehoben) */}
           <Box
             sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              mt: 1,
-              pt: 1,
-              borderTop: '1px dashed #eee',
+              flexShrink: 0,
+              minWidth: 112,
+              px: 1,
+              py: 0.5,
+              borderRadius: 1,
+              bgcolor: isOnTrip ? 'rgba(211, 47, 47, 0.08)' : 'action.hover',
+              textAlign: 'right',
             }}
           >
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="caption" color="text.secondary">
               Anteil:
             </Typography>
             <Typography
-              variant="h6"
+              variant="body2"
               sx={{
                 fontWeight: 'bold',
                 color: myTotal > 0 ? 'error.main' : 'text.disabled',
