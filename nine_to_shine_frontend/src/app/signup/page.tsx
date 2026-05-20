@@ -5,7 +5,7 @@ import {
   AuthErrorCodes,
   createUserWithEmailAndPassword,
 } from 'firebase/auth';
-import { auth } from '../../../firebase';
+import { getFirebaseAuth } from '../../../firebase';
 import { Box, Button, Container, Divider, TextField } from '@mui/material';
 import Layout from '@/components/Layout';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
@@ -80,7 +80,7 @@ const AuthPage: React.FC = () => {
       validateCodeWord()
     ) {
       try {
-        await createUserWithEmailAndPassword(auth, email, password);
+        await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
         enqueueSnackbar('Benutzer wurde erstellt.', {
           variant: 'success',
         });
