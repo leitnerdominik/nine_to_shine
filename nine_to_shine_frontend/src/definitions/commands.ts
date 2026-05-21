@@ -12,6 +12,7 @@ import {
   CreateOrganizerDutyRequest,
   CreateFinanceRequest,
   FinanceDto,
+  UpdateFinanceRequest,
   TopRankedDto,
 } from './types';
 
@@ -263,6 +264,15 @@ export const apiFinance = {
   async create(body: CreateFinanceRequest): Promise<FinanceDto> {
     try {
       const { data } = await api.post<FinanceDto>('/finance', body);
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
+  async update(id: number, body: UpdateFinanceRequest): Promise<FinanceDto> {
+    try {
+      const { data } = await api.put<FinanceDto>(`/finance/${id}`, body);
       return data;
     } catch (e) {
       throw new Error(toErrorMessage(e));

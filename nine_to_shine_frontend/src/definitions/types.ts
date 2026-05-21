@@ -95,6 +95,8 @@ export interface CreateFinanceRequest {
   gameId?: number;
 }
 
+export type UpdateFinanceRequest = CreateFinanceRequest;
+
 export interface TopRankedDto {
   userId: number;
   userDisplayName: string;

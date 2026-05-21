@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Divider,
@@ -24,6 +25,9 @@ import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
+import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
+import SaveIcon from '@mui/icons-material/Save';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
 
@@ -37,6 +41,9 @@ import type { UserDto } from '@/definitions/types';
 interface TripParticipant {
   user: UserDto;
   isOnTrip: boolean;
+  baseTransactionId?: number;
+  tripAmount: number;
+  additionalAmount: number;
   amount: number;
 }
 
@@ -46,12 +53,20 @@ interface TripDetails {
   totalExpense: number;
   totalIncome: number;
   balance: number;
+  baseTotal: number;
+  baseDescription: string;
+  tripShare: number;
+  additionalShare: number;
   seasonId?: number;
   participants: TripParticipant[];
   additionalBookings: {
-    id: number;
+    id: string;
+    transactionIds: number[];
+    transactionEntries: { id: number; userId?: number | null }[];
     direction: 'income' | 'expense';
     amount: number;
+    participantCount: number;
+    shareAmount: number;
     description?: string;
   }[];
 }
@@ -61,6 +76,8 @@ const getCleanTripDescription = (description?: string) =>
     .replace(/\s?\((Anreise\/Unterkunft|Aktivität)\)/g, '')
     .replace(/\s?\(Aktivität.*?\)/g, '')
     .trim();
+
+const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
 export default function TripDetailsPage({
   params,
@@ -77,6 +94,17 @@ export default function TripDetailsPage({
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
+  const [editDirection, setEditDirection] = useState<'income' | 'expense'>(
+    'expense'
+  );
+  const [editAmount, setEditAmount] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [isEditingTripSetup, setIsEditingTripSetup] = useState(false);
+  const [editBaseAmount, setEditBaseAmount] = useState('');
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<
+    number[]
+  >([]);
 
   const fetchTripDetails = useCallback(async () => {
     try {
@@ -96,29 +124,26 @@ export default function TripDetailsPage({
       }
 
       const firstTx = tripTransactions[0];
-      const participants = users.map((user) => {
+      const baseTripTransactions = tripTransactions.filter((tx) =>
+        tx.description?.includes('Anreise/Unterkunft')
+      );
+      const additionalTransactions = tripTransactions.filter(
+        (tx) => !tx.description?.includes('Anreise/Unterkunft')
+      );
+      const participantRows = users.map((user) => {
         const userTxs = tripTransactions.filter((tx) => tx.userId === user.id);
-        const amount = userTxs.reduce(
-          (sum, tx) =>
-            sum + (tx.direction === 'expense' ? tx.amount : -tx.amount),
-          0
-        );
-        const hasTripBooking = userTxs.some((tx) =>
-          tx.description?.includes('Anreise')
+        const baseTransaction = userTxs.find((tx) =>
+          tx.description?.includes('Anreise/Unterkunft')
         );
 
         return {
           user,
-          isOnTrip: hasTripBooking || amount > 0,
-          amount,
+          isOnTrip: !!baseTransaction,
+          baseTransactionId: baseTransaction?.id,
+          tripAmount: 0,
+          additionalAmount: 0,
+          amount: 0,
         };
-      });
-
-      participants.sort((a, b) => {
-        if (a.isOnTrip === b.isOnTrip) {
-          return a.user.displayName.localeCompare(b.user.displayName);
-        }
-        return a.isOnTrip ? -1 : 1;
       });
 
       const totalExpense = tripTransactions
@@ -127,25 +152,116 @@ export default function TripDetailsPage({
       const totalIncome = tripTransactions
         .filter((tx) => tx.direction === 'income')
         .reduce((sum, tx) => sum + tx.amount, 0);
-      const additionalBookings = tripTransactions
-        .filter((tx) => !tx.userId)
-        .map((tx) => ({
-          id: tx.id,
+      const balance = totalExpense - totalIncome;
+      const joinedCount = participantRows.filter((p) => p.isOnTrip).length;
+      const baseTotal = baseTripTransactions.reduce(
+        (sum, tx) =>
+          sum + (tx.direction === 'expense' ? tx.amount : -tx.amount),
+        0
+      );
+      const additionalBalance = additionalTransactions.reduce(
+        (sum, tx) =>
+          sum + (tx.direction === 'expense' ? tx.amount : -tx.amount),
+        0
+      );
+      const tripShare = joinedCount > 0 ? baseTotal / joinedCount : 0;
+      const additionalShare =
+        joinedCount > 0 ? additionalBalance / joinedCount : 0;
+      const participants = participantRows.map((participant) => ({
+        ...participant,
+        tripAmount: participant.isOnTrip ? tripShare : 0,
+        additionalAmount: participant.isOnTrip ? additionalShare : 0,
+        amount: participant.isOnTrip ? tripShare + additionalShare : 0,
+      }));
+
+      participants.sort((a, b) => {
+        if (a.isOnTrip === b.isOnTrip) {
+          return a.user.displayName.localeCompare(b.user.displayName);
+        }
+        return a.isOnTrip ? -1 : 1;
+      });
+
+      const groupedAdditionalBookings = new Map<
+        string,
+        {
+          id: string;
+          transactionIds: number[];
+          transactionEntries: { id: number; userId?: number | null }[];
+          direction: 'income' | 'expense';
+          amount: number;
+          participantIds: Set<number>;
+          hasGlobalBooking: boolean;
+          description?: string;
+        }
+      >();
+
+      additionalTransactions.forEach((tx) => {
+        const key = `${tx.direction}|${tx.description || ''}`;
+        const existing = groupedAdditionalBookings.get(key);
+
+        if (existing) {
+          existing.amount += tx.amount;
+          existing.transactionIds.push(tx.id);
+          existing.transactionEntries.push({ id: tx.id, userId: tx.userId });
+          if (tx.userId) existing.participantIds.add(tx.userId);
+          if (!tx.userId) existing.hasGlobalBooking = true;
+          return;
+        }
+
+        groupedAdditionalBookings.set(key, {
+          id: key,
+          transactionIds: [tx.id],
+          transactionEntries: [{ id: tx.id, userId: tx.userId }],
           direction: tx.direction,
           amount: tx.amount,
+          participantIds: tx.userId ? new Set([tx.userId]) : new Set(),
+          hasGlobalBooking: !tx.userId,
           description: tx.description,
-        }));
+        });
+      });
+
+      const additionalBookings = Array.from(
+        groupedAdditionalBookings.values()
+      ).map((booking) => {
+        const participantCount = booking.hasGlobalBooking
+          ? joinedCount
+          : booking.participantIds.size;
+
+        return {
+          id: booking.id,
+          transactionIds: booking.transactionIds,
+          transactionEntries: booking.transactionEntries,
+          direction: booking.direction,
+          amount: roundMoney(booking.amount),
+          participantCount,
+          shareAmount:
+            participantCount > 0
+              ? roundMoney(booking.amount / participantCount)
+              : 0,
+          description: booking.description,
+        };
+      });
 
       setTrip({
         date: new Date(firstTx.occurredAt),
         description: getCleanTripDescription(firstTx.description),
         totalExpense,
         totalIncome,
-        balance: totalExpense - totalIncome,
+        balance,
+        baseTotal,
+        baseDescription: `${getCleanTripDescription(firstTx.description)} (Anreise/Unterkunft)`,
+        tripShare,
+        additionalShare,
         seasonId: firstTx.seasonId,
         participants,
         additionalBookings,
       });
+      setEditBaseAmount(roundMoney(baseTotal).toFixed(2));
+      setSelectedParticipantIds(
+        participants
+          .filter((participant) => participant.isOnTrip)
+          .map((participant) => participant.user.id)
+      );
     } catch (err) {
       console.error(err);
     } finally {
@@ -167,21 +283,212 @@ export default function TripDetailsPage({
     const bookingDescription = description.trim()
       ? `${trip.description} (${bookingLabel}: ${description.trim()})`
       : `${trip.description} (${bookingLabel})`;
+    const joinedParticipants = trip.participants.filter((p) => p.isOnTrip);
+    if (joinedParticipants.length === 0) return;
+
+    const participantShare = roundMoney(
+      parsedAmount / joinedParticipants.length
+    );
 
     try {
       setIsSaving(true);
-      await apiFinance.create({
-        occurredAt: decodedTripId,
-        direction,
-        amount: parsedAmount,
-        category: 'TRIP',
-        description: bookingDescription,
-        userId: null,
-        seasonId: trip.seasonId,
-      });
+      await Promise.all(
+        joinedParticipants.map((participant) =>
+          apiFinance.create({
+            occurredAt: decodedTripId,
+            direction,
+            amount: participantShare,
+            category: 'TRIP',
+            description: bookingDescription,
+            userId: participant.user.id,
+            seasonId: trip.seasonId,
+          })
+        )
+      );
 
       setAmount('');
       setDescription('');
+      await fetchTripDetails();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleStartEditBooking = (
+    booking: TripDetails['additionalBookings'][number]
+  ) => {
+    setEditingBookingId(booking.id);
+    setEditDirection(booking.direction);
+    setEditAmount(roundMoney(booking.amount).toFixed(2));
+    setEditDescription(booking.description || '');
+  };
+
+  const handleCancelEditBooking = () => {
+    setEditingBookingId(null);
+    setEditAmount('');
+    setEditDescription('');
+    setEditDirection('expense');
+  };
+
+  const handleSaveEditBooking = async () => {
+    if (!trip || !editingBookingId) return;
+
+    const booking = trip.additionalBookings.find(
+      (item) => item.id === editingBookingId
+    );
+    const parsedAmount = parseFloat(editAmount);
+
+    if (!booking || Number.isNaN(parsedAmount) || parsedAmount <= 0) return;
+
+    const splitAmount = roundMoney(
+      parsedAmount / booking.transactionEntries.length
+    );
+
+    try {
+      setIsSaving(true);
+      await Promise.all(
+        booking.transactionEntries.map((transaction) =>
+          apiFinance.update(transaction.id, {
+            occurredAt: decodedTripId,
+            direction: editDirection,
+            amount: splitAmount,
+            category: 'TRIP',
+            description: editDescription.trim() || undefined,
+            userId: transaction.userId ?? null,
+            seasonId: trip.seasonId,
+          })
+        )
+      );
+
+      handleCancelEditBooking();
+      await fetchTripDetails();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleParticipant = (userId: number, checked: boolean) => {
+    setSelectedParticipantIds((current) => {
+      if (checked) {
+        return current.includes(userId) ? current : [...current, userId];
+      }
+
+      return current.filter((id) => id !== userId);
+    });
+  };
+
+  const handleStartEditTripSetup = () => {
+    if (!trip) return;
+
+    setEditBaseAmount(roundMoney(trip.baseTotal).toFixed(2));
+    setSelectedParticipantIds(
+      trip.participants
+        .filter((participant) => participant.isOnTrip)
+        .map((participant) => participant.user.id)
+    );
+    setIsEditingTripSetup(true);
+  };
+
+  const handleCancelEditTripSetup = () => {
+    if (!trip) return;
+
+    setEditBaseAmount(roundMoney(trip.baseTotal).toFixed(2));
+    setSelectedParticipantIds(
+      trip.participants
+        .filter((participant) => participant.isOnTrip)
+        .map((participant) => participant.user.id)
+    );
+    setIsEditingTripSetup(false);
+  };
+
+  const handleSaveTripSetup = async () => {
+    if (!trip) return;
+
+    const parsedBaseAmount = parseFloat(editBaseAmount);
+    if (
+      Number.isNaN(parsedBaseAmount) ||
+      parsedBaseAmount <= 0 ||
+      selectedParticipantIds.length === 0
+    ) {
+      return;
+    }
+
+    const selectedParticipants = trip.participants.filter((participant) =>
+      selectedParticipantIds.includes(participant.user.id)
+    );
+    const baseShare = roundMoney(
+      parsedBaseAmount / selectedParticipants.length
+    );
+    const requests: Promise<unknown>[] = [];
+
+    trip.participants.forEach((participant) => {
+      const isSelected = selectedParticipantIds.includes(participant.user.id);
+
+      if (isSelected && participant.baseTransactionId) {
+        requests.push(
+          apiFinance.update(participant.baseTransactionId, {
+            occurredAt: decodedTripId,
+            direction: 'expense',
+            amount: baseShare,
+            category: 'TRIP',
+            description: trip.baseDescription,
+            userId: participant.user.id,
+            seasonId: trip.seasonId,
+          })
+        );
+      }
+
+      if (isSelected && !participant.baseTransactionId) {
+        requests.push(
+          apiFinance.create({
+            occurredAt: decodedTripId,
+            direction: 'expense',
+            amount: baseShare,
+            category: 'TRIP',
+            description: trip.baseDescription,
+            userId: participant.user.id,
+            seasonId: trip.seasonId,
+          })
+        );
+      }
+
+      if (!isSelected && participant.baseTransactionId) {
+        requests.push(apiFinance.remove(participant.baseTransactionId));
+      }
+    });
+
+    trip.additionalBookings.forEach((booking) => {
+      booking.transactionEntries.forEach((transaction) => {
+        requests.push(apiFinance.remove(transaction.id));
+      });
+
+      const bookingShare = roundMoney(
+        booking.amount / selectedParticipants.length
+      );
+
+      selectedParticipants.forEach((participant) => {
+        requests.push(
+          apiFinance.create({
+            occurredAt: decodedTripId,
+            direction: booking.direction,
+            amount: bookingShare,
+            category: 'TRIP',
+            description: booking.description,
+            userId: participant.user.id,
+            seasonId: trip.seasonId,
+          })
+        );
+      });
+    });
+
+    try {
+      setIsSaving(true);
+      await Promise.all(requests);
+      setIsEditingTripSetup(false);
       await fetchTripDetails();
     } catch (err) {
       console.error(err);
@@ -271,6 +578,14 @@ export default function TripDetailsPage({
               {joinedCount} / {trip.participants.length}
             </Typography>
           </Paper>
+          <Paper variant="outlined" sx={{ p: 2, flex: 1 }}>
+            <Typography variant="caption" color="text.secondary">
+              Pro Kopf
+            </Typography>
+            <Typography variant="h5" fontWeight="bold">
+              {formatCurrency(trip.tripShare + trip.additionalShare)}
+            </Typography>
+          </Paper>
         </Stack>
 
         <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
@@ -321,6 +636,116 @@ export default function TripDetailsPage({
           </Stack>
         </Paper>
 
+        <Paper variant="outlined" sx={{ p: 2, mb: 3 }}>
+          <Stack spacing={2}>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              justifyContent="space-between"
+              alignItems={{ xs: 'stretch', sm: 'center' }}
+              spacing={2}
+            >
+              <Box>
+                <Typography variant="h6">Grundkosten & Teilnehmer</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Grundkosten und Status werden beim Speichern neu aufgeteilt.
+                </Typography>
+              </Box>
+
+              {isEditingTripSetup ? (
+                <Stack direction="row" spacing={1} justifyContent="flex-end">
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<SaveIcon />}
+                    onClick={handleSaveTripSetup}
+                    disabled={
+                      isSaving ||
+                      parseFloat(editBaseAmount || '0') <= 0 ||
+                      selectedParticipantIds.length === 0
+                    }
+                    sx={{
+                      minWidth: { xs: 44, sm: 120 },
+                      px: { xs: 1, sm: 2 },
+                      '& .MuiButton-startIcon': {
+                        mr: { xs: 0, sm: 1 },
+                      },
+                    }}
+                  >
+                    <Box
+                      component="span"
+                      sx={{ display: { xs: 'none', sm: 'inline' } }}
+                    >
+                      Speichern
+                    </Box>
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<CloseIcon />}
+                    onClick={handleCancelEditTripSetup}
+                    disabled={isSaving}
+                    sx={{
+                      minWidth: { xs: 44, sm: 120 },
+                      px: { xs: 1, sm: 2 },
+                      '& .MuiButton-startIcon': {
+                        mr: { xs: 0, sm: 1 },
+                      },
+                    }}
+                  >
+                    <Box
+                      component="span"
+                      sx={{ display: { xs: 'none', sm: 'inline' } }}
+                    >
+                      Abbrechen
+                    </Box>
+                  </Button>
+                </Stack>
+              ) : (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={handleStartEditTripSetup}
+                  sx={{
+                    minWidth: { xs: 44, sm: 120 },
+                    px: { xs: 1, sm: 2 },
+                    alignSelf: { xs: 'flex-end', sm: 'center' },
+                    '& .MuiButton-startIcon': {
+                      mr: { xs: 0, sm: 1 },
+                    },
+                  }}
+                >
+                  <Box
+                    component="span"
+                    sx={{ display: { xs: 'none', sm: 'inline' } }}
+                  >
+                    Bearbeiten
+                  </Box>
+                </Button>
+              )}
+            </Stack>
+
+            {isEditingTripSetup ? (
+              <TextField
+                label="Grundkosten gesamt"
+                type="number"
+                value={editBaseAmount}
+                onChange={(event) => setEditBaseAmount(event.target.value)}
+                slotProps={{
+                  htmlInput: {
+                    step: '0.01',
+                  },
+                }}
+                fullWidth
+              />
+            ) : (
+              <Typography variant="body2">
+                Grundkosten gesamt: <strong>{formatCurrency(trip.baseTotal)}</strong>
+              </Typography>
+            )}
+          </Stack>
+        </Paper>
+
         <TableContainer component={Paper} variant="outlined">
           <Table size="small">
             <TableHead sx={{ bgcolor: '#f5f5f5' }}>
@@ -332,7 +757,13 @@ export default function TripDetailsPage({
                   <strong>Status</strong>
                 </TableCell>
                 <TableCell align="right">
-                  <strong>Kostenanteil</strong>
+                  <strong>Grundkosten</strong>
+                </TableCell>
+                <TableCell align="right">
+                  <strong>Weitere Buchungen</strong>
+                </TableCell>
+                <TableCell align="right">
+                  <strong>Gesamt</strong>
                 </TableCell>
               </TableRow>
             </TableHead>
@@ -341,7 +772,15 @@ export default function TripDetailsPage({
                 <TableRow
                   key={participant.user.id}
                   hover
-                  sx={{ opacity: participant.isOnTrip ? 1 : 0.55 }}
+                  sx={{
+                    opacity: (
+                      isEditingTripSetup
+                        ? selectedParticipantIds.includes(participant.user.id)
+                        : participant.isOnTrip
+                    )
+                      ? 1
+                      : 0.55,
+                  }}
                 >
                   <TableCell>
                     <Typography
@@ -352,7 +791,20 @@ export default function TripDetailsPage({
                     </Typography>
                   </TableCell>
                   <TableCell align="center">
-                    {participant.isOnTrip ? (
+                    {isEditingTripSetup ? (
+                      <Checkbox
+                        checked={selectedParticipantIds.includes(
+                          participant.user.id
+                        )}
+                        onChange={(event) =>
+                          handleToggleParticipant(
+                            participant.user.id,
+                            event.target.checked
+                          )
+                        }
+                        size="small"
+                      />
+                    ) : participant.isOnTrip ? (
                       <Chip
                         icon={<CheckCircleIcon />}
                         label="Dabei"
@@ -373,12 +825,45 @@ export default function TripDetailsPage({
                   <TableCell
                     align="right"
                     sx={{
-                      fontWeight: participant.amount > 0 ? 'bold' : 'normal',
-                      color:
-                        participant.amount > 0 ? 'error.main' : 'text.disabled',
+                      color: participant.isOnTrip
+                        ? 'error.main'
+                        : 'text.disabled',
                     }}
                   >
-                    {participant.amount > 0
+                    {participant.isOnTrip
+                      ? formatCurrency(participant.tripAmount)
+                      : '-'}
+                  </TableCell>
+                  <TableCell
+                    align="right"
+                    sx={{
+                      color: !participant.isOnTrip
+                        ? 'text.disabled'
+                        : participant.additionalAmount > 0
+                          ? 'error.main'
+                          : participant.additionalAmount < 0
+                            ? 'success.main'
+                            : 'text.disabled',
+                    }}
+                  >
+                    {participant.isOnTrip
+                      ? formatCurrency(participant.additionalAmount)
+                      : '-'}
+                  </TableCell>
+                  <TableCell
+                    align="right"
+                    sx={{
+                      fontWeight: participant.isOnTrip ? 'bold' : 'normal',
+                      color: !participant.isOnTrip
+                        ? 'text.disabled'
+                        : participant.amount > 0
+                          ? 'error.main'
+                          : participant.amount < 0
+                            ? 'success.main'
+                            : 'text.disabled',
+                    }}
+                  >
+                    {participant.isOnTrip
                       ? formatCurrency(participant.amount)
                       : '-'}
                   </TableCell>
@@ -399,36 +884,180 @@ export default function TripDetailsPage({
                   key={booking.id}
                   direction={{ xs: 'column', sm: 'row' }}
                   justifyContent="space-between"
+                  alignItems={{ xs: 'stretch', sm: 'center' }}
                   spacing={1}
                 >
-                  <Box>
-                    <Chip
-                      label={
-                        booking.direction === 'expense' ? 'Ausgabe' : 'Einnahme'
-                      }
-                      color={
-                        booking.direction === 'expense' ? 'error' : 'success'
-                      }
-                      variant="outlined"
-                      size="small"
-                      sx={{ mr: 1 }}
-                    />
-                    <Typography component="span" variant="body2">
-                      {booking.description || '-'}
-                    </Typography>
-                  </Box>
-                  <Typography
-                    variant="body2"
-                    fontWeight="bold"
-                    color={
-                      booking.direction === 'expense'
-                        ? 'error.main'
-                        : 'success.main'
-                    }
-                  >
-                    {booking.direction === 'expense' ? '-' : '+'}{' '}
-                    {formatCurrency(booking.amount)}
-                  </Typography>
+                  {editingBookingId === booking.id ? (
+                    <Stack
+                      spacing={1.25}
+                      sx={{
+                        width: '100%',
+                        p: { xs: 1, sm: 0 },
+                        borderRadius: 1,
+                        bgcolor: { xs: 'action.hover', sm: 'transparent' },
+                      }}
+                    >
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                        <TextField
+                          select
+                          size="small"
+                          label="Typ"
+                          value={editDirection}
+                          onChange={(event) =>
+                            setEditDirection(
+                              event.target.value as 'expense' | 'income'
+                            )
+                          }
+                          fullWidth
+                          sx={{ flex: { sm: '0 0 140px' } }}
+                        >
+                          <MenuItem value="expense">Ausgabe</MenuItem>
+                          <MenuItem value="income">Einnahme</MenuItem>
+                        </TextField>
+                        <TextField
+                          size="small"
+                          label="Betrag"
+                          type="number"
+                          value={editAmount}
+                          onChange={(event) =>
+                            setEditAmount(event.target.value)
+                          }
+                          slotProps={{
+                            htmlInput: {
+                              step: '0.01',
+                            },
+                          }}
+                          fullWidth
+                          sx={{ flex: { sm: '0 0 130px' } }}
+                        />
+                        <TextField
+                          size="small"
+                          label="Beschreibung"
+                          value={editDescription}
+                          onChange={(event) =>
+                            setEditDescription(event.target.value)
+                          }
+                          fullWidth
+                        />
+                      </Stack>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        justifyContent="flex-end"
+                      >
+                        <Button
+                          variant="contained"
+                          size="small"
+                          startIcon={<SaveIcon />}
+                          onClick={handleSaveEditBooking}
+                          disabled={
+                            isSaving || parseFloat(editAmount || '0') <= 0
+                          }
+                          sx={{
+                            minWidth: { xs: 44, sm: 120 },
+                            px: { xs: 1, sm: 2 },
+                            '& .MuiButton-startIcon': {
+                              mr: { xs: 0, sm: 1 },
+                            },
+                          }}
+                        >
+                          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                            Speichern
+                          </Box>
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<CloseIcon />}
+                          onClick={handleCancelEditBooking}
+                          disabled={isSaving}
+                          sx={{
+                            minWidth: { xs: 44, sm: 120 },
+                            px: { xs: 1, sm: 2 },
+                            '& .MuiButton-startIcon': {
+                              mr: { xs: 0, sm: 1 },
+                            },
+                          }}
+                        >
+                          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                            Abbrechen
+                          </Box>
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  ) : (
+                    <>
+                      <Box>
+                        <Chip
+                          label={
+                            booking.direction === 'expense'
+                              ? 'Ausgabe'
+                              : 'Einnahme'
+                          }
+                          color={
+                            booking.direction === 'expense'
+                              ? 'error'
+                              : 'success'
+                          }
+                          variant="outlined"
+                          size="small"
+                          sx={{ mr: 1 }}
+                        />
+                        <Typography component="span" variant="body2">
+                          {booking.description || '-'}
+                        </Typography>
+                      </Box>
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        justifyContent="flex-end"
+                        spacing={1}
+                      >
+                        <Typography
+                          variant="body2"
+                          fontWeight="bold"
+                          color={
+                            booking.direction === 'expense'
+                              ? 'error.main'
+                              : 'success.main'
+                          }
+                        >
+                          {booking.direction === 'expense' ? '-' : '+'}{' '}
+                          {formatCurrency(booking.amount)}
+                          <Typography
+                            component="span"
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ ml: 1 }}
+                          >
+                            ({booking.participantCount} Pers. x{' '}
+                            {formatCurrency(booking.shareAmount)})
+                          </Typography>
+                        </Typography>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<EditIcon />}
+                          onClick={() => handleStartEditBooking(booking)}
+                          sx={{
+                            minWidth: { xs: 44, sm: 120 },
+                            px: { xs: 1, sm: 2 },
+                            flexShrink: 0,
+                            '& .MuiButton-startIcon': {
+                              mr: { xs: 0, sm: 1 },
+                            },
+                          }}
+                        >
+                          <Box
+                            component="span"
+                            sx={{ display: { xs: 'none', sm: 'inline' } }}
+                          >
+                            Bearbeiten
+                          </Box>
+                        </Button>
+                      </Stack>
+                    </>
+                  )}
                 </Stack>
               ))}
             </Stack>
