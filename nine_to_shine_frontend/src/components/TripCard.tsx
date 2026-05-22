@@ -7,6 +7,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
 import dayjs from 'dayjs';
 
@@ -26,7 +27,17 @@ export default function TripCard({
   onClick,
 }: TripCardProps) {
   return (
-    <Card variant="outlined" sx={{ bgcolor: '#fff' }}>
+    <Card
+      variant="outlined"
+      sx={{
+        bgcolor: '#fff',
+        transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
+        '&:hover': {
+          borderColor: 'primary.main',
+          boxShadow: 2,
+        },
+      }}
+    >
       <CardActionArea onClick={onClick} sx={{ height: '100%' }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
           <Stack
@@ -74,11 +85,29 @@ export default function TripCard({
               </Box>
             </Stack>
 
-            <Chip
-              label={`Gesamt: ${formatCurrency(totalAmount)}`}
-              variant="outlined"
-              size="small"
-            />
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              alignSelf={{ xs: 'stretch', sm: 'center' }}
+              justifyContent={{ xs: 'space-between', sm: 'flex-end' }}
+            >
+              <Chip
+                label={`Gesamt: ${formatCurrency(totalAmount)}`}
+                variant="outlined"
+                size="small"
+              />
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Typography
+                  variant="caption"
+                  color="primary.main"
+                  sx={{ fontWeight: 700 }}
+                >
+                  Details
+                </Typography>
+                <ChevronRightIcon color="primary" fontSize="small" />
+              </Stack>
+            </Stack>
           </Stack>
         </CardContent>
       </CardActionArea>

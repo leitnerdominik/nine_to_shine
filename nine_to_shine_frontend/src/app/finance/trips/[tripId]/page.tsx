@@ -8,6 +8,11 @@ import {
   Chip,
   CircularProgress,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   IconButton,
   MenuItem,
   Paper,
@@ -26,10 +31,12 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CloseIcon from '@mui/icons-material/Close';
+import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
+import { useSnackbar } from 'notistack';
 
 import { formatCurrency } from '@/common/misc';
 import CustomTitle from '@/components/CustomTitle';
@@ -75,6 +82,7 @@ const getCleanTripDescription = (description?: string) =>
   (description || 'Unbenannter Trip')
     .replace(/\s?\((Anreise\/Unterkunft|Aktivität)\)/g, '')
     .replace(/\s?\(Aktivität.*?\)/g, '')
+    .replace(/\s?\((Ausgabe|Einnahme).*?\)/g, '')
     .trim();
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
@@ -87,6 +95,7 @@ export default function TripDetailsPage({
   const { tripId } = use(params);
   const decodedTripId = decodeURIComponent(tripId);
   const router = useRouter();
+  const { enqueueSnackbar } = useSnackbar();
 
   const [loading, setLoading] = useState(true);
   const [trip, setTrip] = useState<TripDetails | null>(null);
@@ -105,6 +114,8 @@ export default function TripDetailsPage({
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<
     number[]
   >([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchTripDetails = useCallback(async () => {
     try {
@@ -497,6 +508,23 @@ export default function TripDetailsPage({
     }
   };
 
+  const handleDeleteTrip = async () => {
+    if (!trip) return;
+
+    try {
+      setIsDeleting(true);
+      await apiFinance.deleteTripsByDate(trip.date);
+      enqueueSnackbar('Trip erfolgreich gelöscht.', { variant: 'success' });
+      router.push('/finance/trips');
+    } catch (err) {
+      console.error(err);
+      enqueueSnackbar('Fehler beim Löschen des Trips.', { variant: 'error' });
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -543,6 +571,25 @@ export default function TripDetailsPage({
               </Typography>
             </Box>
           </Stack>
+          <Button
+            variant="outlined"
+            color="error"
+            size="small"
+            startIcon={<DeleteIcon />}
+            onClick={() => setDeleteDialogOpen(true)}
+            sx={{
+              minWidth: { xs: 44, sm: 120 },
+              px: { xs: 1, sm: 2 },
+              flexShrink: 0,
+              '& .MuiButton-startIcon': {
+                mr: { xs: 0, sm: 1 },
+              },
+            }}
+          >
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              Löschen
+            </Box>
+          </Button>
         </Stack>
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
@@ -1063,6 +1110,42 @@ export default function TripDetailsPage({
             </Stack>
           </Paper>
         )}
+
+        <Dialog
+          open={deleteDialogOpen}
+          onClose={() => !isDeleting && setDeleteDialogOpen(false)}
+        >
+          <DialogTitle>Trip löschen</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Willst du den Trip &quot;{trip.description}&quot; wirklich löschen?
+              Alle Buchungen dieses Trips werden entfernt.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              onClick={handleDeleteTrip}
+              color="error"
+              variant="contained"
+              disabled={isDeleting}
+              startIcon={
+                isDeleting ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : (
+                  <DeleteIcon />
+                )
+              }
+            >
+              Löschen
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Layout>
   );

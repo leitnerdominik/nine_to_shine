@@ -50,6 +50,7 @@ export default function TripHistoryPage() {
           const description = (firstTx.description || 'Unbenannter Trip')
             .replace(/\s?\((Anreise\/Unterkunft|Aktivität)\)/g, '')
             .replace(/\s?\(Aktivität.*?\)/g, '')
+            .replace(/\s?\((Ausgabe|Einnahme).*?\)/g, '')
             .trim();
 
           return {
