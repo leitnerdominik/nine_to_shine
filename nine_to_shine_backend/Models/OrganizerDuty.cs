@@ -8,6 +8,8 @@ namespace NineToShineApi.Models
 
         public DateTime DutyDate { get; set; }
 
+        public bool IsSkipped { get; set; }
+
         [ForeignKey("UserId")]
         public long UserId { get; set; }
         public User User { get; set; } = null!;

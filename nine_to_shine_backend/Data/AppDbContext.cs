@@ -14,6 +14,7 @@ namespace NineToShineApi.Data
         public DbSet<Ranking> Rankings => Set<Ranking>();
         public DbSet<Finance> Finance => Set<Finance>();
         public DbSet<OrganizerDuty> OrganizerDuties => Set<OrganizerDuty>();
+        public DbSet<OrganizerRotationMember> OrganizerRotationMembers => Set<OrganizerRotationMember>();
 
         protected override void OnModelCreating(ModelBuilder mb)
         {
@@ -123,6 +124,11 @@ namespace NineToShineApi.Data
                     .HasColumnType("date")
                     .IsRequired();
 
+                e.Property(x => x.IsSkipped)
+                    .HasColumnName("is_skipped")
+                    .HasDefaultValue(false)
+                    .IsRequired();
+
                 e.Property(x => x.UserId)
                     .HasColumnName("user_id")
                     .IsRequired();
@@ -143,6 +149,43 @@ namespace NineToShineApi.Data
 
                 e.HasIndex(x => x.DutyDate);
                 e.HasIndex(x => x.UserId);
+            });
+
+            mb.Entity<OrganizerRotationMember>(e =>
+            {
+                e.ToTable("organizer_rotation_member");
+
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Id)
+                    .HasColumnName("id")
+                    .ValueGeneratedOnAdd();
+
+                e.Property(x => x.SeasonId)
+                    .HasColumnName("season_id")
+                    .IsRequired();
+
+                e.Property(x => x.UserId)
+                    .HasColumnName("user_id")
+                    .IsRequired();
+
+                e.Property(x => x.SortOrder)
+                    .HasColumnName("sort_order")
+                    .IsRequired();
+
+                e.HasOne(x => x.Season)
+                    .WithMany()
+                    .HasForeignKey(x => x.SeasonId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                e.HasOne(x => x.User)
+                    .WithMany()
+                    .HasForeignKey(x => x.UserId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                e.HasIndex(x => x.SeasonId);
+                e.HasIndex(x => x.UserId);
+                e.HasIndex(x => new { x.SeasonId, x.SortOrder }).IsUnique();
+                e.HasIndex(x => new { x.SeasonId, x.UserId }).IsUnique();
             });
 
             // finance
