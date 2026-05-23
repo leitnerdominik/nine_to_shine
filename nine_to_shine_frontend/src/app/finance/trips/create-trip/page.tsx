@@ -49,7 +49,6 @@ export default function TripExpensesPage() {
     control,
     register,
     handleSubmit,
-    setValue,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<FormInput, unknown, FormOutput>({
@@ -58,9 +57,7 @@ export default function TripExpensesPage() {
       globalDate: new Date().toISOString().slice(0, 10),
       seasonId: undefined as unknown as number,
       description: '',
-      activityName: '',
       baseCostTotal: '0',
-      activityCostTotal: '0',
       participants: [],
     },
     mode: 'onBlur',
@@ -73,31 +70,23 @@ export default function TripExpensesPage() {
 
   // --- Live Calculation Logic ---
   const watchedBaseCost = useWatch({ control, name: 'baseCostTotal' });
-  const watchedActivityCost = useWatch({ control, name: 'activityCostTotal' });
   const watchedParticipants = useWatch({ control, name: 'participants' });
 
   // Berechnete Werte (Memoized für Performance)
   const calculation = useMemo(() => {
     const baseTotal = parseFloat(watchedBaseCost || '0');
-    const activityTotal = parseFloat(watchedActivityCost || '0');
 
     const tripCount =
       watchedParticipants?.filter((p) => p.isOnTrip).length || 0;
-    const activityCount =
-      watchedParticipants?.filter((p) => p.isDoingActivity).length || 0;
 
     const baseShare = tripCount > 0 ? baseTotal / tripCount : 0;
-    const activityShare = activityCount > 0 ? activityTotal / activityCount : 0;
 
     return {
       baseTotal,
-      activityTotal,
       tripCount,
-      activityCount,
       baseShare,
-      activityShare,
     };
-  }, [watchedBaseCost, watchedActivityCost, watchedParticipants]);
+  }, [watchedBaseCost, watchedParticipants]);
 
   // --- Initial Load ---
   useEffect(() => {
@@ -120,14 +109,11 @@ export default function TripExpensesPage() {
           globalDate: new Date().toISOString().slice(0, 10),
           seasonId: highestSeason?.id,
           description: '',
-          activityName: '',
           baseCostTotal: '0',
-          activityCostTotal: '0',
           participants: users.map((u: UserDto) => ({
             userId: u.id,
             displayName: u.displayName,
             isOnTrip: true, // Default: Alle fahren mit
-            isDoingActivity: true, // Default: Alle machen mit
           })),
         });
       } catch {
@@ -140,24 +126,13 @@ export default function TripExpensesPage() {
     })();
   }, [reset, enqueueSnackbar]);
 
-  // --- Sync Logic: Wenn "Fährt nicht mit", dann auch "Keine Aktivität" ---
-  useEffect(() => {
-    if (!watchedParticipants) return;
-    watchedParticipants.forEach((p, index) => {
-      if (!p.isOnTrip && p.isDoingActivity) {
-        // Wenn Trip deaktiviert wird, muss Aktivität auch aus sein
-        setValue(`participants.${index}.isDoingActivity`, false);
-      }
-    });
-  }, [watchedParticipants, setValue]);
-
   // --- Submit ---
   const onSubmit = async (data: FormOutput) => {
     const promises: Promise<CreateFinanceRequest>[] = [];
-    const { baseShare, activityShare } = calculation;
+    const { baseShare } = calculation;
 
     // Nur buchen, wenn Kosten > 0 sind
-    if (calculation.baseTotal <= 0 && calculation.activityTotal <= 0) {
+    if (calculation.baseTotal <= 0) {
       enqueueSnackbar('Gesamtkosten müssen größer 0 sein.', {
         variant: 'warning',
       });
@@ -168,9 +143,6 @@ export default function TripExpensesPage() {
 
     const baseDescText = data.description || 'Vereinsurlaub';
 
-    // Aktivitätsbeschreibung bauen
-    const activityDetail = data.activityName ? `: ${data.activityName}` : '';
-    const fullActivityDesc = `${baseDescText} (Aktivität${activityDetail})`;
     const fullBaseDesc = `${baseDescText} (Anreise/Unterkunft)`;
 
     for (const p of data.participants) {
@@ -186,22 +158,6 @@ export default function TripExpensesPage() {
             amount: baseShare,
             category: 'TRIP',
             description: fullBaseDesc,
-            userId: p.userId,
-            seasonId: data.seasonId,
-          })
-        );
-      }
-
-      // 2. Aktivität Kosten buchen
-      if (p.isDoingActivity && calculation.activityTotal > 0) {
-        bookingCount++;
-        promises.push(
-          apiFinance.create({
-            occurredAt: new Date(data.globalDate).toISOString(),
-            direction: 'expense',
-            amount: activityShare,
-            category: 'TRIP',
-            description: fullActivityDesc,
             userId: p.userId,
             seasonId: data.seasonId,
           })
@@ -297,73 +253,33 @@ export default function TripExpensesPage() {
               helperText={errors.description?.message}
             />
 
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={4}>
-              <Box flex={1}>
-                <TextField
-                  fullWidth
-                  label="Kosten: Anreise & Unterkunft (Gesamt)"
-                  type="number"
-                  {...register('baseCostTotal')}
-                  error={!!errors.baseCostTotal}
-                  helperText={errors.baseCostTotal?.message}
-                  slotProps={{
-                    input: {
-                      endAdornment: (
-                        <InputAdornment position="end">€</InputAdornment>
-                      ),
-                    },
-                  }}
-                />
-                <Typography
-                  variant="caption"
-                  sx={{ mt: 1, display: 'block', fontWeight: 'bold' }}
-                >
-                  Pro Kopf: {formatCurrency(calculation.baseShare)}
-                  <span style={{ fontWeight: 'normal', color: '#666' }}>
-                    {' '}
-                    ({calculation.tripCount} Pers.)
-                  </span>
-                </Typography>
-              </Box>
-
-              <Divider />
-
-              <Box flex={1}>
-                <Stack spacing={2}>
-                  <TextField
-                    fullWidth
-                    label=" Aktivität"
-                    {...register('activityName')}
-                  />
-
-                  <TextField
-                    fullWidth
-                    label="Kosten: Aktivität (Gesamt)"
-                    type="number"
-                    {...register('activityCostTotal')}
-                    error={!!errors.activityCostTotal}
-                    helperText={errors.activityCostTotal?.message}
-                    slotProps={{
-                      input: {
-                        endAdornment: (
-                          <InputAdornment position="end">€</InputAdornment>
-                        ),
-                      },
-                    }}
-                  />
-                </Stack>
-                <Typography
-                  variant="caption"
-                  sx={{ mt: 1, display: 'block', fontWeight: 'bold' }}
-                >
-                  Pro Kopf: {formatCurrency(calculation.activityShare)}
-                  <span style={{ fontWeight: 'normal', color: '#666' }}>
-                    {' '}
-                    ({calculation.activityCount} Pers.)
-                  </span>
-                </Typography>
-              </Box>
-            </Stack>
+            <Box>
+              <TextField
+                fullWidth
+                label="Kosten: Anreise & Unterkunft (Gesamt)"
+                type="number"
+                {...register('baseCostTotal')}
+                error={!!errors.baseCostTotal}
+                helperText={errors.baseCostTotal?.message}
+                slotProps={{
+                  input: {
+                    endAdornment: (
+                      <InputAdornment position="end">€</InputAdornment>
+                    ),
+                  },
+                }}
+              />
+              <Typography
+                variant="caption"
+                sx={{ mt: 1, display: 'block', fontWeight: 'bold' }}
+              >
+                Pro Kopf: {formatCurrency(calculation.baseShare)}
+                <span style={{ fontWeight: 'normal', color: '#666' }}>
+                  {' '}
+                  ({calculation.tripCount} Pers.)
+                </span>
+              </Typography>
+            </Box>
           </Stack>
         </Paper>
 
@@ -372,7 +288,16 @@ export default function TripExpensesPage() {
           Teilnehmer & Aufteilung
         </Typography>
 
-        <Stack spacing={2}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, minmax(0, 1fr))',
+            },
+            gap: 1,
+          }}
+        >
           {fields.map((field, index) => (
             <ParticipantRow
               key={field.id}
@@ -380,10 +305,9 @@ export default function TripExpensesPage() {
               control={control}
               register={register}
               baseShare={calculation.baseShare}
-              activityShare={calculation.activityShare}
             />
           ))}
-        </Stack>
+        </Box>
 
         <Stack direction="row" justifyContent="flex-end" sx={{ mt: 3 }}>
           <Button

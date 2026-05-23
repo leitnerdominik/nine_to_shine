@@ -235,6 +235,87 @@ namespace NineToShineApi.Controllers
             return CreatedAtAction(nameof(GetById), new { id = entity.Id }, dto);
         }
 
+        // PUT: api/finance/123
+        [HttpPut("{id:long}")]
+        public async Task<ActionResult<FinanceDto>> Update(
+            long id,
+            [FromBody] UpdateFinanceRequest body,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            var entity = await _db.Finance.FindAsync(new object[] { id }, ct);
+            if (entity is null) return NotFound();
+
+            var dir = body.Direction.ToLowerInvariant();
+            if (dir != "income" && dir != "expense")
+                return BadRequest(new { error = "Direction must be 'income' or 'expense'." });
+
+            if (body.Amount <= 0)
+                return BadRequest(new { error = "Amount must be greater than 0." });
+
+            if (body.UserId.HasValue)
+            {
+                var userExists = await _db.Users.AnyAsync(u => u.Id == body.UserId, ct);
+                if (!userExists) return BadRequest(new { error = "user_id not found." });
+            }
+
+            if (body.SeasonId.HasValue)
+            {
+                var seasonExists = await _db.Season.AnyAsync(s => s.Id == body.SeasonId, ct);
+                if (!seasonExists) return BadRequest(new { error = "season_id not found." });
+            }
+
+            if (body.GameId.HasValue)
+            {
+                var gameExists = await _db.Game.AnyAsync(g => g.Id == body.GameId, ct);
+                if (!gameExists) return BadRequest(new { error = "game_id not found." });
+            }
+
+            entity.OccurredAt = body.OccurredAt ?? entity.OccurredAt;
+            entity.Direction = dir;
+            entity.Amount = body.Amount;
+            entity.Category = body.Category.ToUpperInvariant();
+            entity.Description = body.Description;
+            entity.UserId = body.UserId;
+            entity.SeasonId = body.SeasonId;
+            entity.GameId = body.GameId;
+
+            await _db.SaveChangesAsync(ct);
+
+            string? userDisplayName = null;
+            if (entity.UserId.HasValue)
+            {
+                userDisplayName = await _db.Users
+                    .Where(u => u.Id == entity.UserId)
+                    .Select(u => u.DisplayName)
+                    .FirstOrDefaultAsync(ct);
+            }
+
+            string? gameName = null;
+            if (entity.GameId.HasValue)
+            {
+                gameName = await _db.Game
+                    .Where(g => g.Id == entity.GameId)
+                    .Select(g => g.GameName)
+                    .FirstOrDefaultAsync(ct);
+            }
+
+            return Ok(new FinanceDto(
+                entity.Id,
+                entity.OccurredAt,
+                entity.Direction,
+                entity.Amount,
+                entity.Category,
+                entity.Description,
+                entity.UserId,
+                userDisplayName,
+                entity.SeasonId,
+                entity.GameId,
+                gameName
+            ));
+        }
+
         // DELETE: api/finance/123
         [HttpDelete("{id:long}")]
         public async Task<IActionResult> Delete(long id, CancellationToken ct)
@@ -323,6 +404,32 @@ namespace NineToShineApi.Controllers
         public string? Description { get; set; }
 
         // Optional: Wenn null, ist es eine Ausgabe für "Alle" (z.B. Pokal kaufen)
+        [Display(Name = "user_id")]
+        public long? UserId { get; set; }
+
+        [Display(Name = "season_id")]
+        public long? SeasonId { get; set; }
+
+        public long? GameId { get; set; }
+    }
+
+    public class UpdateFinanceRequest
+    {
+        public DateTime? OccurredAt { get; set; }
+
+        [Required]
+        [RegularExpression("income|expense", ErrorMessage = "Direction must be 'income' or 'expense'")]
+        public string Direction { get; set; } = "income";
+
+        [Required]
+        [Range(0.01, 1000000)]
+        public decimal Amount { get; set; }
+
+        [Required]
+        public string Category { get; set; } = "OTHER";
+
+        public string? Description { get; set; }
+
         [Display(Name = "user_id")]
         public long? UserId { get; set; }
 

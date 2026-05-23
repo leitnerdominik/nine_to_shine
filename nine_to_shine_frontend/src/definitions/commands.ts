@@ -10,9 +10,14 @@ import {
   UserDto,
   OrganizerDutyDto,
   CreateOrganizerDutyRequest,
+  OrganizerRotationMemberDto,
   CreateFinanceRequest,
   FinanceDto,
+  UpdateFinanceRequest,
   TopRankedDto,
+  UpdateOrganizerRotationRequest,
+  GenerateOrganizerDutiesRequest,
+  GenerateOrganizerDutiesResponse,
 } from './types';
 
 /**
@@ -212,6 +217,16 @@ export const apiOrganizerDuty = {
     return res.data;
   },
 
+  async generate(
+    payload: GenerateOrganizerDutiesRequest
+  ): Promise<GenerateOrganizerDutiesResponse> {
+    const { data } = await api.post<GenerateOrganizerDutiesResponse>(
+      '/OrganizerDuty/generate',
+      payload
+    );
+    return data;
+  },
+
   async update(
     id: number,
     payload: CreateOrganizerDutyRequest
@@ -227,9 +242,38 @@ export const apiOrganizerDuty = {
     await api.delete(`/OrganizerDuty/${id}`);
   },
 
+  async setSkipped(
+    id: number,
+    isSkipped: boolean
+  ): Promise<OrganizerDutyDto> {
+    const res = await api.patch<OrganizerDutyDto>(`/OrganizerDuty/${id}/skip`, {
+      isSkipped,
+    });
+    return res.data;
+  },
+
   getNextDuty: async () => {
     const { data } = await api.get<OrganizerDutyDto | null>(
       '/OrganizerDuty/next'
+    );
+    return data;
+  },
+
+  async getRotation(seasonId: number): Promise<OrganizerRotationMemberDto[]> {
+    const { data } = await api.get<OrganizerRotationMemberDto[]>(
+      '/OrganizerDuty/rotation',
+      { params: { seasonId } }
+    );
+    return data;
+  },
+
+  async updateRotation(
+    seasonId: number,
+    payload: UpdateOrganizerRotationRequest
+  ): Promise<OrganizerRotationMemberDto[]> {
+    const { data } = await api.put<OrganizerRotationMemberDto[]>(
+      `/OrganizerDuty/rotation/${seasonId}`,
+      payload
     );
     return data;
   },
@@ -263,6 +307,15 @@ export const apiFinance = {
   async create(body: CreateFinanceRequest): Promise<FinanceDto> {
     try {
       const { data } = await api.post<FinanceDto>('/finance', body);
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
+  async update(id: number, body: UpdateFinanceRequest): Promise<FinanceDto> {
+    try {
+      const { data } = await api.put<FinanceDto>(`/finance/${id}`, body);
       return data;
     } catch (e) {
       throw new Error(toErrorMessage(e));

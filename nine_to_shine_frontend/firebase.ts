@@ -1,5 +1,5 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getApps, initializeApp } from 'firebase/app';
+import { getAuth, type Auth } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -10,6 +10,22 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+const hasFirebaseConfig = Object.values(firebaseConfig).every(Boolean);
+
+const getFirebaseApp = () => {
+  if (!hasFirebaseConfig) {
+    throw new Error(
+      'Missing Firebase configuration. Set all NEXT_PUBLIC_FIREBASE_* environment variables.'
+    );
+  }
+
+  return getApps()[0] ?? initializeApp(firebaseConfig);
+};
+
+export const getFirebaseAuth = (): Auth => {
+  if (typeof window === 'undefined') {
+    throw new Error('Firebase Auth is only available in the browser.');
+  }
+
+  return getAuth(getFirebaseApp());
+};

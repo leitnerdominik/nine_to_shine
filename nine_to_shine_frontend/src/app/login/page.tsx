@@ -5,7 +5,7 @@ import {
   AuthErrorCodes,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
-import { auth } from '../../../firebase';
+import { getFirebaseAuth } from '../../../firebase';
 import { Box, Button, Container, Divider, TextField } from '@mui/material';
 import Layout from '@/components/Layout';
 import LoginIcon from '@mui/icons-material/Login';
@@ -48,7 +48,7 @@ const AuthPage: React.FC = () => {
   const signIn = async () => {
     if (validateEmail() && validatePassword()) {
       try {
-        await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
         enqueueSnackbar('Anmeldung erfolgreich!', {
           variant: 'success',
         });

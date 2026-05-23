@@ -17,7 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import Image from 'next/image';
 import Logo from '../assets/logo.png';
 import { AuthError, signOut } from 'firebase/auth';
-import { auth } from '../../firebase';
+import { getFirebaseAuth } from '../../firebase';
 import { enqueueSnackbar } from 'notistack';
 import HomeIcon from '@mui/icons-material/Home';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
@@ -82,7 +82,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const handleLogout = async () => {
     try {
-      signOut(auth);
+      await signOut(getFirebaseAuth());
       router.push(routes.login);
     } catch (error) {
       console.log('error logout: ', error);

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
+  Chip,
   Paper,
   Stack,
   Table,
@@ -158,9 +159,13 @@ export default function OrganizerDutyList() {
                   </Typography>
                 </TableCell>
                 <TableCell>
-                  <Typography variant="body1" fontWeight={500}>
-                    {duty.userDisplayName}
-                  </Typography>
+                  {duty.isSkipped ? (
+                    <Chip label="Entfällt" size="small" />
+                  ) : (
+                    <Typography variant="body1" fontWeight={500}>
+                      {duty.userDisplayName ?? '-'}
+                    </Typography>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

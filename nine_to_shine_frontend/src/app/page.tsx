@@ -195,7 +195,7 @@ export default function DashboardPage() {
                             fontWeight="bold"
                             color="text.primary"
                           >
-                            {nextDuty.userDisplayName}
+                            {nextDuty.userDisplayName ?? '-'}
                           </Typography>
                           <Typography
                             variant="subtitle1"
