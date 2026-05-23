@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,39 +11,43 @@ import {
   Button,
   CircularProgress,
   MenuItem,
+  Typography,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
+import EventRepeatIcon from '@mui/icons-material/EventRepeat';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { useSnackbar } from 'notistack';
 import { useRouter } from 'next/navigation';
+import dayjs from 'dayjs';
+import 'dayjs/locale/de';
 
 import Layout from '@/components/Layout';
 import CustomTitle from '@/components/CustomTitle';
-import { apiOrganizerDuty, apiUsers, apiSeason } from '@/definitions/commands';
-import type {
-  CreateOrganizerDutyRequest,
-  UserDto,
-  SeasonDto,
-} from '@/definitions/types';
+import { apiOrganizerDuty, apiSeason } from '@/definitions/commands';
+import type { SeasonDto } from '@/definitions/types';
+
+dayjs.locale('de');
+
+const currentMonth = dayjs().format('YYYY-MM');
 
 const schema = z.object({
-  seasonId: z.number().int().min(1, 'Bitte Saison wählen.'),
-  dutyDate: z
+  seasonId: z.number().int().min(1, 'Bitte Saison waehlen.'),
+  startMonth: z
     .string()
-    .min(1, 'Bitte Datum wählen.')
-    .refine((s) => !Number.isNaN(Date.parse(s)), {
-      message: 'Ungültiges Datum.',
-    }),
-  userId: z.number().int().min(1, 'Bitte Organisator wählen.'),
+    .regex(/^\d{4}-\d{2}$/, 'Bitte Startmonat waehlen.'),
+  monthCount: z
+    .number()
+    .int('Bitte eine ganze Zahl eingeben.')
+    .min(1, 'Mindestens ein Monat.')
+    .max(36, 'Maximal 36 Monate.'),
 });
 
 type FormInput = z.input<typeof schema>;
 type FormOutput = z.output<typeof schema>;
 
-export default function OrganizerCreateForm() {
+export default function OrganizerTermGenerator() {
   const { enqueueSnackbar } = useSnackbar();
   const router = useRouter();
 
-  const [users, setUsers] = useState<UserDto[]>([]);
   const [seasons, setSeasons] = useState<SeasonDto[]>([]);
   const [loadingData, setLoadingData] = useState<boolean>(true);
 
@@ -52,47 +56,46 @@ export default function OrganizerCreateForm() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
     setValue,
   } = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(schema),
     defaultValues: {
-      dutyDate: new Date().toISOString().slice(0, 10),
-      userId: 0,
+      startMonth: currentMonth,
+      monthCount: 12,
       seasonId: 0,
     },
     mode: 'onBlur',
   });
 
-  // Daten laden (User & Saisons)
+  const startMonth = watch('startMonth');
+  const monthCount = watch('monthCount');
+
+  const previewMonths = useMemo(() => {
+    if (!startMonth || !Number.isFinite(monthCount) || monthCount < 1) {
+      return [];
+    }
+
+    return Array.from({ length: Math.min(monthCount, 36) }, (_, index) =>
+      dayjs(`${startMonth}-01`).add(index, 'month').format('MMMM YYYY')
+    );
+  }, [monthCount, startMonth]);
+
   useEffect(() => {
     (async () => {
       try {
-        const [usersData, seasonsData] = await Promise.all([
-          apiUsers.getAll(),
-          apiSeason.getAll(),
-        ]);
-
-        // Nur aktive User
-        const activeUsers = usersData.filter((u) => u.isActive);
-        setUsers(activeUsers);
+        const seasonsData = await apiSeason.getAll();
         setSeasons(seasonsData);
 
-        // Vorselektierung: Erster User
-        if (activeUsers.length > 0) {
-          setValue('userId', activeUsers[0].id);
-        }
+        const highestSeason = seasonsData.reduce<SeasonDto | null>(
+          (acc, cur) =>
+            acc === null || cur.seasonNumber > acc.seasonNumber ? cur : acc,
+          null
+        );
 
-        // Vorselektierung: Höchste Saison
-        if (seasonsData.length > 0) {
-          const highestSeason = seasonsData.reduce<SeasonDto | null>(
-            (acc, cur) =>
-              acc === null || cur.seasonNumber > acc.seasonNumber ? cur : acc,
-            null
-          );
-          if (highestSeason) {
-            setValue('seasonId', highestSeason.id);
-          }
+        if (highestSeason) {
+          setValue('seasonId', highestSeason.id);
         }
       } catch (e) {
         enqueueSnackbar(
@@ -106,31 +109,29 @@ export default function OrganizerCreateForm() {
   }, [enqueueSnackbar, setValue]);
 
   const onSubmit = async (values: FormOutput) => {
-    const payload: CreateOrganizerDutyRequest = {
-      dutyDate: new Date(values.dutyDate).toISOString(),
-      userId: values.userId,
-      seasonId: values.seasonId,
-    };
-
     try {
-      await apiOrganizerDuty.create(payload);
-      enqueueSnackbar('Organisator-Termin wurde erstellt!', {
-        variant: 'success',
+      const result = await apiOrganizerDuty.generate({
+        seasonId: values.seasonId,
+        startMonth: `${values.startMonth}-01T00:00:00.000Z`,
+        monthCount: values.monthCount,
       });
 
-      reset({
-        dutyDate: new Date().toISOString().slice(0, 10),
-        userId: values.userId,
-        seasonId: values.userId,
-      });
+      enqueueSnackbar(
+        `${result.createdCount} Termine erstellt, ${result.existingCount} bereits vorhanden.`,
+        { variant: 'success' }
+      );
 
       router.push('/admincenter/organizer');
     } catch (error) {
       enqueueSnackbar(
-        (error as Error)?.message ?? 'Termin konnte nicht erstellt werden.',
+        (error as Error)?.message ?? 'Termine konnten nicht erstellt werden.',
         { variant: 'error' }
       );
     }
+  };
+
+  const onGenerateClick = () => {
+    void handleSubmit(onSubmit)();
   };
 
   return (
@@ -139,11 +140,11 @@ export default function OrganizerCreateForm() {
         component="form"
         onSubmit={handleSubmit(onSubmit)}
         noValidate
-        sx={{ maxWidth: 600, mx: 'auto', p: 3 }}
+        sx={{ maxWidth: 640, mx: 'auto', p: 3 }}
       >
-        <CustomTitle text="Organisator-Termin erstellen" />
+        <CustomTitle text="Saison-Termine generieren" />
+
         <Stack spacing={2}>
-          {/* Saison Dropdown */}
           <Controller
             name="seasonId"
             control={control}
@@ -158,77 +159,100 @@ export default function OrganizerCreateForm() {
                 disabled={isSubmitting || loadingData}
                 fullWidth
               >
-                {seasons.map((s) => (
-                  <MenuItem key={s.id} value={s.id}>
-                    Saison {s.seasonNumber}
-                  </MenuItem>
-                ))}
+                {[...seasons]
+                  .sort((a, b) => b.seasonNumber - a.seasonNumber)
+                  .map((s) => (
+                    <MenuItem key={s.id} value={s.id}>
+                      Saison {s.seasonNumber}
+                    </MenuItem>
+                  ))}
               </TextField>
             )}
           />
 
           <TextField
-            label="Datum"
-            type="date"
-            {...register('dutyDate')}
-            error={!!errors.dutyDate}
-            helperText={errors.dutyDate?.message}
+            label="Startmonat"
+            type="month"
+            {...register('startMonth')}
+            error={!!errors.startMonth}
+            helperText={errors.startMonth?.message}
             disabled={isSubmitting}
             fullWidth
             slotProps={{
-              inputLabel: { shrink: true }, // Fix für Date-Input Label Überlappung
+              inputLabel: { shrink: true },
             }}
           />
 
-          <Controller
-            name="userId"
-            control={control}
-            render={({ field }) => (
-              <TextField
-                select
-                label="Organisator"
-                value={field.value || ''}
-                onChange={(e) => field.onChange(Number(e.target.value))}
-                error={!!errors.userId}
-                helperText={errors.userId?.message}
-                disabled={isSubmitting || loadingData}
-                fullWidth
-              >
-                {users.map((u) => (
-                  <MenuItem key={u.id} value={u.id}>
-                    {u.displayName}
-                  </MenuItem>
-                ))}
-              </TextField>
-            )}
+          <TextField
+            label="Anzahl Monate"
+            type="number"
+            {...register('monthCount', { valueAsNumber: true })}
+            error={!!errors.monthCount}
+            helperText={errors.monthCount?.message ?? '1 bis 36'}
+            disabled={isSubmitting}
+            fullWidth
+            slotProps={{
+              htmlInput: { min: 1, max: 36 },
+            }}
           />
+
+          {previewMonths.length > 0 && (
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary" mb={1}>
+                Vorschau
+              </Typography>
+              <Stack direction="row" flexWrap="wrap" useFlexGap spacing={1}>
+                {previewMonths.map((month) => (
+                  <Typography
+                    key={month}
+                    variant="body2"
+                    sx={{
+                      px: 1.25,
+                      py: 0.75,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                    }}
+                  >
+                    {month}
+                  </Typography>
+                ))}
+              </Stack>
+            </Box>
+          )}
 
           <Stack direction="row" spacing={2}>
             <Button
               type="button"
               variant="outlined"
               disabled={isSubmitting}
+              startIcon={<RestartAltIcon />}
               onClick={() =>
                 reset({
                   seasonId: seasons.length > 0 ? seasons[0].id : 0,
-                  dutyDate: new Date().toISOString().slice(0, 10),
-                  userId: users[0]?.id ?? 0,
+                  startMonth: currentMonth,
+                  monthCount: 12,
                 })
               }
             >
-              Zurücksetzen
+              Zuruecksetzen
             </Button>
 
             <Button
-              type="submit"
+              type="button"
               variant="contained"
               size="large"
-              disabled={isSubmitting}
+              disabled={isSubmitting || loadingData}
+              onClick={onGenerateClick}
               startIcon={
-                isSubmitting ? <CircularProgress size={18} /> : <AddIcon />
+                isSubmitting ? (
+                  <CircularProgress size={18} />
+                ) : (
+                  <EventRepeatIcon />
+                )
               }
             >
-              {isSubmitting ? 'wird erstellt…' : 'Erstellen'}
+              {isSubmitting ? 'wird erstellt...' : 'Generieren'}
             </Button>
           </Stack>
         </Stack>

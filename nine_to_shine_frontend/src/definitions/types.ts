@@ -58,16 +58,42 @@ export type CreateRankingRequest = {
 export interface OrganizerDutyDto {
   id: number;
   dutyDate: string; // ISO-String
-  userId: number;
-  userDisplayName: string;
+  userId?: number | null;
+  userDisplayName?: string | null;
   seasonId: number;
   seasonDisplayNumber: number;
+  isSkipped: boolean;
 }
 
 export interface CreateOrganizerDutyRequest {
   dutyDate: string; // ISO-String
-  userId: number;
+  userId?: number | null;
   seasonId: number;
+  isSkipped?: boolean;
+}
+
+export interface OrganizerRotationMemberDto {
+  id: number;
+  seasonId: number;
+  userId: number;
+  userDisplayName: string;
+  sortOrder: number;
+}
+
+export interface UpdateOrganizerRotationRequest {
+  userIds: number[];
+}
+
+export interface GenerateOrganizerDutiesRequest {
+  seasonId: number;
+  startMonth: string;
+  monthCount: number;
+}
+
+export interface GenerateOrganizerDutiesResponse {
+  createdCount: number;
+  existingCount: number;
+  duties: OrganizerDutyDto[];
 }
 
 export interface FinanceDto {
