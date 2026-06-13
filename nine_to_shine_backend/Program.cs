@@ -39,7 +39,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 Console.WriteLine($"ContentRoot Path: {builder.Environment.ContentRootPath}");
 Console.WriteLine($"Environment: {builder.Environment.EnvironmentName}");
-Console.WriteLine("ConnectionString: " + builder.Configuration.GetConnectionString("DefaultConnection"));
 
 // Enable CORS (for frontend access)
 builder.Services.AddCors(options =>
