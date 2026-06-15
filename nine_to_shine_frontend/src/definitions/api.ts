@@ -1,7 +1,7 @@
 import axios, { AxiosHeaders, InternalAxiosRequestConfig } from 'axios';
 
 const BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5005/api';
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5006/api';
 
 /**
  * Optional Firebase token provider.
