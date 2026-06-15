@@ -7,6 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="NineToShineApi.Tests\**" />
+    <Content Remove="NineToShineApi.Tests\**" />
+    <EmbeddedResource Remove="NineToShineApi.Tests\**" />
+    <None Remove="NineToShineApi.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.21" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.4">

@@ -98,7 +98,7 @@ namespace NineToShineApi.Controllers
 
             if (userPoints == null)
             {
-                return Ok(null); // No rankings found
+                return new JsonResult(null) { StatusCode = 200 }; // No rankings found
             }
 
             var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userPoints.UserId, ct);
