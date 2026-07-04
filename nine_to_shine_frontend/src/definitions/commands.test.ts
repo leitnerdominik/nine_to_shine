@@ -72,6 +72,47 @@ describe('API command wrappers', () => {
     );
   });
 
+  it('creates trip splits through the backend split endpoint', async () => {
+    apiModule.api.post.mockResolvedValueOnce({ data: [] });
+
+    const payload = {
+      occurredAt: '2026-06-15T12:30:00.000Z',
+      direction: 'expense' as const,
+      amount: 10,
+      description: 'Urlaub (Ausgabe)',
+      seasonId: 4,
+      userIds: [3, 2, 1],
+    };
+
+    await apiFinance.createTripSplit(payload);
+
+    expect(apiModule.api.post).toHaveBeenCalledWith(
+      '/finance/trip/split',
+      payload
+    );
+  });
+
+  it('replaces trip splits through the backend replace endpoint', async () => {
+    apiModule.api.post.mockResolvedValueOnce({ data: [] });
+
+    const payload = {
+      transactionIds: [10, 11],
+      occurredAt: '2026-06-15T12:30:00.000Z',
+      direction: 'expense' as const,
+      amount: 10,
+      description: 'Urlaub (Ausgabe)',
+      seasonId: 4,
+      userIds: [3, 2, 1],
+    };
+
+    await apiFinance.replaceTripSplit(payload);
+
+    expect(apiModule.api.post).toHaveBeenCalledWith(
+      '/finance/trip/split/replace',
+      payload
+    );
+  });
+
   it('updates organizer rotation for the selected season', async () => {
     apiModule.api.put.mockResolvedValueOnce({ data: [] });
 

@@ -22,11 +22,7 @@ import { useRouter } from 'next/navigation';
 import Layout from '@/components/Layout';
 import CustomTitle from '@/components/CustomTitle';
 import { apiFinance, apiUsers, apiSeason } from '@/definitions/commands';
-import type {
-  CreateFinanceRequest,
-  UserDto,
-  SeasonDto,
-} from '@/definitions/types';
+import type { UserDto, SeasonDto } from '@/definitions/types';
 
 // Importieren der ausgelagerten Teile
 import {
@@ -128,9 +124,6 @@ export default function TripExpensesPage() {
 
   // --- Submit ---
   const onSubmit = async (data: FormOutput) => {
-    const promises: Promise<CreateFinanceRequest>[] = [];
-    const { baseShare } = calculation;
-
     // Nur buchen, wenn Kosten > 0 sind
     if (calculation.baseTotal <= 0) {
       enqueueSnackbar('Gesamtkosten müssen größer 0 sein.', {
@@ -139,42 +132,32 @@ export default function TripExpensesPage() {
       return;
     }
 
-    let bookingCount = 0;
+    const selectedParticipants = data.participants.filter((p) => p.isOnTrip);
 
     const baseDescText = data.description || 'Vereinsurlaub';
 
     const fullBaseDesc = `${baseDescText} (Anreise/Unterkunft)`;
 
-    for (const p of data.participants) {
-      if (!p.isOnTrip) continue;
-
-      // 1. Basis Kosten buchen
-      if (calculation.baseTotal > 0) {
-        bookingCount++;
-        promises.push(
-          apiFinance.create({
-            occurredAt: new Date(data.globalDate).toISOString(),
-            direction: 'expense',
-            amount: baseShare,
-            category: 'TRIP',
-            description: fullBaseDesc,
-            userId: p.userId,
-            seasonId: data.seasonId,
-          })
-        );
-      }
-    }
-
-    if (bookingCount === 0) {
+    if (selectedParticipants.length === 0) {
       enqueueSnackbar('Keine Teilnehmer ausgewählt.', { variant: 'warning' });
       return;
     }
 
     try {
-      await Promise.all(promises);
-      enqueueSnackbar(`${bookingCount} Buchungen erfolgreich erstellt!`, {
-        variant: 'success',
+      await apiFinance.createTripSplit({
+        occurredAt: new Date(data.globalDate).toISOString(),
+        direction: 'expense',
+        amount: calculation.baseTotal,
+        description: fullBaseDesc,
+        seasonId: data.seasonId,
+        userIds: selectedParticipants.map((p) => p.userId),
       });
+      enqueueSnackbar(
+        `${selectedParticipants.length} Buchungen erfolgreich erstellt!`,
+        {
+          variant: 'success',
+        }
+      );
 
       router.push('/finance/trips');
     } catch (err) {

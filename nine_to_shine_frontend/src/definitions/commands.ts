@@ -13,6 +13,8 @@ import {
   OrganizerRotationMemberDto,
   CreateFinanceRequest,
   FinanceDto,
+  CreateTripSplitRequest,
+  ReplaceTripSplitRequest,
   UpdateFinanceRequest,
   TopRankedDto,
   UpdateOrganizerRotationRequest,
@@ -316,6 +318,27 @@ export const apiFinance = {
   async update(id: number, body: UpdateFinanceRequest): Promise<FinanceDto> {
     try {
       const { data } = await api.put<FinanceDto>(`/finance/${id}`, body);
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
+  async createTripSplit(body: CreateTripSplitRequest): Promise<FinanceDto[]> {
+    try {
+      const { data } = await api.post<FinanceDto[]>('/finance/trip/split', body);
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
+  async replaceTripSplit(body: ReplaceTripSplitRequest): Promise<FinanceDto[]> {
+    try {
+      const { data } = await api.post<FinanceDto[]>(
+        '/finance/trip/split/replace',
+        body
+      );
       return data;
     } catch (e) {
       throw new Error(toErrorMessage(e));

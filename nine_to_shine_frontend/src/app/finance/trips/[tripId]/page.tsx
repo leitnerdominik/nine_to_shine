@@ -48,7 +48,6 @@ import type { UserDto } from '@/definitions/types';
 interface TripParticipant {
   user: UserDto;
   isOnTrip: boolean;
-  baseTransactionId?: number;
   tripAmount: number;
   additionalAmount: number;
   amount: number;
@@ -62,6 +61,7 @@ interface TripDetails {
   balance: number;
   baseTotal: number;
   baseDescription: string;
+  baseTransactionIds: number[];
   tripShare: number;
   additionalShare: number;
   seasonId?: number;
@@ -73,7 +73,6 @@ interface TripDetails {
     direction: 'income' | 'expense';
     amount: number;
     participantCount: number;
-    shareAmount: number;
     description?: string;
   }[];
 }
@@ -143,17 +142,29 @@ export default function TripDetailsPage({
       );
       const participantRows = users.map((user) => {
         const userTxs = tripTransactions.filter((tx) => tx.userId === user.id);
-        const baseTransaction = userTxs.find((tx) =>
+        const baseTransactions = userTxs.filter((tx) =>
           tx.description?.includes('Anreise/Unterkunft')
+        );
+        const additionalUserTransactions = userTxs.filter(
+          (tx) => !tx.description?.includes('Anreise/Unterkunft')
+        );
+        const tripAmount = baseTransactions.reduce(
+          (sum, tx) =>
+            sum + (tx.direction === 'expense' ? tx.amount : -tx.amount),
+          0
+        );
+        const additionalAmount = additionalUserTransactions.reduce(
+          (sum, tx) =>
+            sum + (tx.direction === 'expense' ? tx.amount : -tx.amount),
+          0
         );
 
         return {
           user,
-          isOnTrip: !!baseTransaction,
-          baseTransactionId: baseTransaction?.id,
-          tripAmount: 0,
-          additionalAmount: 0,
-          amount: 0,
+          isOnTrip: baseTransactions.length > 0,
+          tripAmount,
+          additionalAmount,
+          amount: tripAmount + additionalAmount,
         };
       });
 
@@ -178,12 +189,7 @@ export default function TripDetailsPage({
       const tripShare = joinedCount > 0 ? baseTotal / joinedCount : 0;
       const additionalShare =
         joinedCount > 0 ? additionalBalance / joinedCount : 0;
-      const participants = participantRows.map((participant) => ({
-        ...participant,
-        tripAmount: participant.isOnTrip ? tripShare : 0,
-        additionalAmount: participant.isOnTrip ? additionalShare : 0,
-        amount: participant.isOnTrip ? tripShare + additionalShare : 0,
-      }));
+      const participants = participantRows;
 
       participants.sort((a, b) => {
         if (a.isOnTrip === b.isOnTrip) {
@@ -245,10 +251,6 @@ export default function TripDetailsPage({
           direction: booking.direction,
           amount: roundMoney(booking.amount),
           participantCount,
-          shareAmount:
-            participantCount > 0
-              ? roundMoney(booking.amount / participantCount)
-              : 0,
           description: booking.description,
         };
       });
@@ -261,6 +263,7 @@ export default function TripDetailsPage({
         balance,
         baseTotal,
         baseDescription: `${getCleanTripDescription(firstTx.description)} (Anreise/Unterkunft)`,
+        baseTransactionIds: baseTripTransactions.map((tx) => tx.id),
         tripShare,
         additionalShare,
         seasonId: firstTx.seasonId,
@@ -297,25 +300,16 @@ export default function TripDetailsPage({
     const joinedParticipants = trip.participants.filter((p) => p.isOnTrip);
     if (joinedParticipants.length === 0) return;
 
-    const participantShare = roundMoney(
-      parsedAmount / joinedParticipants.length
-    );
-
     try {
       setIsSaving(true);
-      await Promise.all(
-        joinedParticipants.map((participant) =>
-          apiFinance.create({
-            occurredAt: decodedTripId,
-            direction,
-            amount: participantShare,
-            category: 'TRIP',
-            description: bookingDescription,
-            userId: participant.user.id,
-            seasonId: trip.seasonId,
-          })
-        )
-      );
+      await apiFinance.createTripSplit({
+        occurredAt: decodedTripId,
+        direction,
+        amount: parsedAmount,
+        description: bookingDescription,
+        seasonId: trip.seasonId,
+        userIds: joinedParticipants.map((participant) => participant.user.id),
+      });
 
       setAmount('');
       setDescription('');
@@ -352,26 +346,36 @@ export default function TripDetailsPage({
     const parsedAmount = parseFloat(editAmount);
 
     if (!booking || Number.isNaN(parsedAmount) || parsedAmount <= 0) return;
+    const bookingUserIds = Array.from(
+      new Set(
+        booking.transactionEntries
+          .map((transaction) => transaction.userId)
+          .filter((userId): userId is number => typeof userId === 'number')
+      )
+    );
+    const targetUserIds = bookingUserIds.length
+      ? bookingUserIds
+      : trip.participants
+          .filter((participant) => participant.isOnTrip)
+          .map((participant) => participant.user.id);
 
-    const splitAmount = roundMoney(
-      parsedAmount / booking.transactionEntries.length
+    if (targetUserIds.length === 0) return;
+
+    const transactionIds = booking.transactionEntries.map(
+      (transaction) => transaction.id
     );
 
     try {
       setIsSaving(true);
-      await Promise.all(
-        booking.transactionEntries.map((transaction) =>
-          apiFinance.update(transaction.id, {
-            occurredAt: decodedTripId,
-            direction: editDirection,
-            amount: splitAmount,
-            category: 'TRIP',
-            description: editDescription.trim() || undefined,
-            userId: transaction.userId ?? null,
-            seasonId: trip.seasonId,
-          })
-        )
-      );
+      await apiFinance.replaceTripSplit({
+        transactionIds,
+        occurredAt: decodedTripId,
+        direction: editDirection,
+        amount: parsedAmount,
+        description: editDescription.trim() || undefined,
+        seasonId: trip.seasonId,
+        userIds: targetUserIds,
+      });
 
       handleCancelEditBooking();
       await fetchTripDetails();
@@ -431,69 +435,53 @@ export default function TripDetailsPage({
     const selectedParticipants = trip.participants.filter((participant) =>
       selectedParticipantIds.includes(participant.user.id)
     );
-    const baseShare = roundMoney(
-      parsedBaseAmount / selectedParticipants.length
+    const selectedUserIds = selectedParticipants.map(
+      (participant) => participant.user.id
     );
     const requests: Promise<unknown>[] = [];
 
-    trip.participants.forEach((participant) => {
-      const isSelected = selectedParticipantIds.includes(participant.user.id);
-
-      if (isSelected && participant.baseTransactionId) {
-        requests.push(
-          apiFinance.update(participant.baseTransactionId, {
-            occurredAt: decodedTripId,
-            direction: 'expense',
-            amount: baseShare,
-            category: 'TRIP',
-            description: trip.baseDescription,
-            userId: participant.user.id,
-            seasonId: trip.seasonId,
-          })
-        );
-      }
-
-      if (isSelected && !participant.baseTransactionId) {
-        requests.push(
-          apiFinance.create({
-            occurredAt: decodedTripId,
-            direction: 'expense',
-            amount: baseShare,
-            category: 'TRIP',
-            description: trip.baseDescription,
-            userId: participant.user.id,
-            seasonId: trip.seasonId,
-          })
-        );
-      }
-
-      if (!isSelected && participant.baseTransactionId) {
-        requests.push(apiFinance.remove(participant.baseTransactionId));
-      }
-    });
+    if (trip.baseTransactionIds.length > 0) {
+      requests.push(
+        apiFinance.replaceTripSplit({
+          transactionIds: trip.baseTransactionIds,
+          occurredAt: decodedTripId,
+          direction: 'expense',
+          amount: parsedBaseAmount,
+          description: trip.baseDescription,
+          seasonId: trip.seasonId,
+          userIds: selectedUserIds,
+        })
+      );
+    } else {
+      requests.push(
+        apiFinance.createTripSplit({
+          occurredAt: decodedTripId,
+          direction: 'expense',
+          amount: parsedBaseAmount,
+          description: trip.baseDescription,
+          seasonId: trip.seasonId,
+          userIds: selectedUserIds,
+        })
+      );
+    }
 
     trip.additionalBookings.forEach((booking) => {
-      booking.transactionEntries.forEach((transaction) => {
-        requests.push(apiFinance.remove(transaction.id));
-      });
-
-      const bookingShare = roundMoney(
-        booking.amount / selectedParticipants.length
+      const transactionIds = booking.transactionEntries.map(
+        (transaction) => transaction.id
       );
+      if (transactionIds.length === 0) return;
 
-      selectedParticipants.forEach((participant) => {
-        requests.push(
-          apiFinance.create({
-            occurredAt: decodedTripId,
-            direction: booking.direction,
-            amount: bookingShare,
-            category: 'TRIP',
-            description: booking.description,
-            userId: participant.user.id,
-            seasonId: trip.seasonId,
-          })
-        );
-      });
+      requests.push(
+        apiFinance.replaceTripSplit({
+          transactionIds,
+          occurredAt: decodedTripId,
+          direction: booking.direction,
+          amount: booking.amount,
+          description: booking.description,
+          seasonId: trip.seasonId,
+          userIds: selectedUserIds,
+        })
+      );
     });
 
     try {
@@ -1077,8 +1065,7 @@ export default function TripDetailsPage({
                             color="text.secondary"
                             sx={{ ml: 1 }}
                           >
-                            ({booking.participantCount} Pers. x{' '}
-                            {formatCurrency(booking.shareAmount)})
+                            ({booking.participantCount} Pers.)
                           </Typography>
                         </Typography>
                         <Button

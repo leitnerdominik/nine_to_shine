@@ -123,6 +123,19 @@ export interface CreateFinanceRequest {
 
 export type UpdateFinanceRequest = CreateFinanceRequest;
 
+export interface CreateTripSplitRequest {
+  occurredAt?: string;
+  direction: 'income' | 'expense';
+  amount: number;
+  description?: string;
+  seasonId?: number;
+  userIds: number[];
+}
+
+export interface ReplaceTripSplitRequest extends CreateTripSplitRequest {
+  transactionIds: number[];
+}
+
 export interface TopRankedDto {
   userId: number;
   userDisplayName: string;
