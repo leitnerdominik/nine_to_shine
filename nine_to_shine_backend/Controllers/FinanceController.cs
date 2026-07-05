@@ -103,6 +103,23 @@ namespace NineToShineApi.Controllers
             return Ok(income - expense);
         }
 
+        // Der Saldo aller Mitgliedskonten zusammen (ohne Vereinskasse)
+        [HttpGet("balance/members")]
+        public async Task<ActionResult<decimal>> GetMembersBalance(CancellationToken ct)
+        {
+            var q = _db.Finance.AsNoTracking().Where(f => f.UserId != null);
+
+            var income = await q
+                .Where(f => f.Direction == "income")
+                .SumAsync(f => f.Amount, ct);
+
+            var expense = await q
+                .Where(f => f.Direction == "expense")
+                .SumAsync(f => f.Amount, ct);
+
+            return Ok(income - expense);
+        }
+
         // GET: api/finance/balance/user/5
         // Der Saldo eines spezifischen Freundes (Was hat er eingezahlt vs. verursacht)
         [HttpGet("balance/user/{userId:long}")]

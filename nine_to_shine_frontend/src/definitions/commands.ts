@@ -376,6 +376,11 @@ export const apiFinance = {
     return data;
   },
 
+  async getMembersBalance(): Promise<number> {
+    const { data } = await api.get<number>('/finance/balance/members');
+    return data;
+  },
+
   async deleteByGameId(gameId: number): Promise<void> {
     try {
       await api.delete(`/finance/by-game/${gameId}`);

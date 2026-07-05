@@ -62,22 +62,27 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     public async Task Balance_endpoints_and_filters_calculate_expected_totals()
     {
         var user = TestUser();
+        var anotherUser = TestUser("Alex", "alex@example.test");
         var season = TestSeason();
-        await SeedAsync(user, season);
+        await SeedAsync(user, anotherUser, season);
         await SeedAsync(
             TestFinance("income", 100, "DUES", seasonId: season.Id),
             TestFinance("expense", 30, "PIZZA", seasonId: season.Id),
             TestFinance("income", 20, "DUES", user: user, seasonId: season.Id),
-            TestFinance("expense", 5, "TRIP", user: user, seasonId: season.Id));
+            TestFinance("expense", 5, "TRIP", user: user, seasonId: season.Id),
+            TestFinance("income", 12, "DUES", user: anotherUser, seasonId: season.Id),
+            TestFinance("expense", 2, "TRIP", user: anotherUser, seasonId: season.Id));
 
         var globalBalance = await Client.GetFromJsonAsync<decimal>("/api/finance/balance/global");
         var clubBalance = await Client.GetFromJsonAsync<decimal>("/api/finance/balance/club");
+        var membersBalance = await Client.GetFromJsonAsync<decimal>("/api/finance/balance/members");
         var userBalance = await Client.GetFromJsonAsync<decimal>($"/api/finance/balance/user/{user.Id}");
         var globalScope = await Client.GetFromJsonAsync<List<FinanceDto>>("/api/finance?scope=global");
         var expenses = await Client.GetFromJsonAsync<List<FinanceDto>>("/api/finance?direction=expense");
 
-        globalBalance.Should().Be(85m);
+        globalBalance.Should().Be(95m);
         clubBalance.Should().Be(70m);
+        membersBalance.Should().Be(25m);
         userBalance.Should().Be(15m);
         globalScope.Should().NotBeNull();
         globalScope!.Should().OnlyContain(x => x.UserId == null);
