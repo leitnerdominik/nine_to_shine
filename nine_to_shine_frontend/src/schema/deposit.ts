@@ -13,19 +13,34 @@ const isMoneyAmount = (value: string, allowZero: boolean) => {
 };
 
 // 1. Schema für Mitgliedsbeiträge
-export const entrySchema = z.object({
-  userId: z.number(),
-  displayName: z.string(),
-  useStandard: z.boolean(),
-  hasPaid: z.boolean(),
-  description: z.string().optional(),
-  memberAmount: z.string().refine((val) => isMoneyAmount(val, true), {
-    message: 'Muss ein nichtnegativer Betrag mit maximal zwei Nachkommastellen sein',
-  }),
-  clubAmount: z.string().refine((val) => isMoneyAmount(val, true), {
-    message: 'Muss ein nichtnegativer Betrag mit maximal zwei Nachkommastellen sein',
-  }),
-});
+export const entrySchema = z
+  .object({
+    userId: z.number(),
+    displayName: z.string(),
+    useStandard: z.boolean(),
+    hasPaid: z.boolean(),
+    description: z.string().optional(),
+    memberAmount: z.string().refine((val) => isMoneyAmount(val, true), {
+      message: 'Muss ein nichtnegativer Betrag mit maximal zwei Nachkommastellen sein',
+    }),
+    clubAmount: z.string().refine((val) => isMoneyAmount(val, true), {
+      message: 'Muss ein nichtnegativer Betrag mit maximal zwei Nachkommastellen sein',
+    }),
+  })
+  .superRefine((entry, ctx) => {
+    if (
+      entry.hasPaid &&
+      isMoneyAmount(entry.memberAmount, true) &&
+      isMoneyAmount(entry.clubAmount, true) &&
+      Number(entry.memberAmount) + Number(entry.clubAmount) === 0
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['memberAmount'],
+        message: 'Mindestens ein Betrag muss größer als 0 sein',
+      });
+    }
+  });
 
 // 2. Schema für Sonstige Einnahmen
 export const otherIncomeItemSchema = z.object({

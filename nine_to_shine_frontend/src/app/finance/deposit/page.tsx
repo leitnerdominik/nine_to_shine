@@ -243,8 +243,8 @@ function BulkDepositForm() {
           .filter((entry) => entry.hasPaid)
           .map((entry) => ({
             userId: entry.userId,
-            memberAmount: parseFloat(entry.memberAmount),
-            clubAmount: parseFloat(entry.clubAmount),
+            memberAmount: Number(entry.memberAmount),
+            clubAmount: Number(entry.clubAmount),
             description: entry.description?.trim() || undefined,
           })),
         otherIncomes: data.otherIncomes

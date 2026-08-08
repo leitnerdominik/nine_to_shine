@@ -160,6 +160,35 @@ describe('BulkDepositPage edit mode', () => {
     expect(await screen.findByText('Konflikt')).toBeInTheDocument();
   });
 
+  it('submits a cleared member portion as zero', async () => {
+    const browser = userEvent.setup();
+    renderWithProviders(<BulkDepositPage />);
+
+    const memberAmount = await screen.findByRole('spinbutton', {
+      name: 'Gutschrift',
+    });
+    await browser.clear(memberAmount);
+    await browser.click(
+      screen.getByRole('button', { name: 'Änderungen speichern' })
+    );
+
+    await waitFor(() =>
+      expect(mocks.replaceGameDeposits).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({
+          members: [
+            {
+              userId: 1,
+              memberAmount: 0,
+              clubAmount: 20,
+              description: 'Bar',
+            },
+          ],
+        })
+      )
+    );
+  });
+
   it('cancels back to the game detail without saving', async () => {
     const browser = userEvent.setup();
     renderWithProviders(<BulkDepositPage />);
