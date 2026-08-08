@@ -176,6 +176,263 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Replace_game_deposits_is_atomic_and_preserves_unmanaged_rows()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, nina);
+        await SeedAsync(nina, season, game);
+
+        var memberDues = TestFinance("income", 30m, "DUES", user: nina, game: game);
+        memberDues.Description = "Mitgliedsbeitrag";
+        var clubDues = TestFinance("income", 20m, "DUES", game: game);
+        clubDues.Description = "Mitgliedsbeitrag (Nina)";
+        var oldOtherIncome = TestFinance("income", 5m, "OTHER", game: game);
+        var concurrentOtherIncome = TestFinance("income", 2m, "OTHER", game: game);
+        var unrelatedIncome = TestFinance("income", 3m, "PRIZE", game: game);
+        var expense = TestFinance("expense", 10m, "PIZZA", game: game);
+        await SeedAsync(
+            memberDues,
+            clubDues,
+            oldOtherIncome,
+            concurrentOtherIncome,
+            unrelatedIncome,
+            expense);
+
+        var response = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactionIds = new[] { memberDues.Id, clubDues.Id, oldOtherIncome.Id },
+                occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+                members = new[]
+                {
+                    new
+                    {
+                        userId = nina.Id,
+                        memberAmount = 60m,
+                        clubAmount = 40m,
+                        description = "Nachzahlung"
+                    }
+                },
+                otherIncomes = new[]
+                {
+                    new { amount = 7m, description = "Restgeld" }
+                }
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var created = await response.Content.ReadFromJsonAsync<List<FinanceDto>>();
+        created.Should().NotBeNull();
+        created!.Should().HaveCount(3);
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .OrderBy(finance => finance.Id)
+            .ToListAsync());
+
+        rows.Should().HaveCount(6);
+        rows.Should().NotContain(finance =>
+            finance.Id == memberDues.Id ||
+            finance.Id == clubDues.Id ||
+            finance.Id == oldOtherIncome.Id);
+        rows.Should().Contain(finance => finance.Id == concurrentOtherIncome.Id);
+        rows.Should().Contain(finance => finance.Id == unrelatedIncome.Id);
+        rows.Should().Contain(finance => finance.Id == expense.Id);
+        rows.Should().Contain(finance =>
+            finance.UserId == nina.Id &&
+            finance.Category == "DUES" &&
+            finance.Amount == 60m &&
+            finance.Description == "Mitgliedsbeitrag - Nachzahlung");
+        rows.Should().Contain(finance =>
+            finance.UserId == null &&
+            finance.Category == "DUES" &&
+            finance.Amount == 40m &&
+            finance.Description == "Mitgliedsbeitrag - Nachzahlung (Nina)");
+        rows.Should().Contain(finance =>
+            finance.Category == "OTHER" &&
+            finance.Amount == 7m &&
+            finance.Description == "Restgeld");
+    }
+
+    [Fact]
+    public async Task Replace_game_deposits_can_add_rows_without_existing_deposits()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, nina);
+        await SeedAsync(nina, season, game);
+
+        var response = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactionIds = Array.Empty<long>(),
+                occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+                members = new[]
+                {
+                    new
+                    {
+                        userId = nina.Id,
+                        memberAmount = 30m,
+                        clubAmount = 20m,
+                        description = ""
+                    }
+                },
+                otherIncomes = Array.Empty<object>()
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .ToListAsync());
+        rows.Should().HaveCount(2);
+        rows.Should().OnlyContain(finance =>
+            finance.GameId == game.Id &&
+            finance.SeasonId == season.Id &&
+            finance.Category == "DUES");
+    }
+
+    [Fact]
+    public async Task Replace_game_deposits_deletes_rows_omitted_from_the_snapshot()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, nina);
+        await SeedAsync(nina, season, game);
+
+        var memberDues = TestFinance("income", 30m, "DUES", user: nina, game: game);
+        var clubDues = TestFinance("income", 20m, "DUES", game: game);
+        var expense = TestFinance("expense", 10m, "PIZZA", game: game);
+        await SeedAsync(memberDues, clubDues, expense);
+
+        var response = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactionIds = new[] { memberDues.Id, clubDues.Id },
+                occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+                members = Array.Empty<object>(),
+                otherIncomes = Array.Empty<object>()
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var created = await response.Content.ReadFromJsonAsync<List<FinanceDto>>();
+        created.Should().BeEmpty();
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .ToListAsync());
+        rows.Should().ContainSingle(finance => finance.Id == expense.Id);
+    }
+
+    [Fact]
+    public async Task Replace_game_deposits_rejects_invalid_requests_without_changing_rows()
+    {
+        var nina = TestUser();
+        var alex = TestUser("Alex", "alex@example.test");
+        var season = TestSeason();
+        var game = TestGame(season, nina);
+        var otherGame = TestGame(season, alex, "Other game");
+        await SeedAsync(nina, alex, season, game, otherGame);
+
+        var memberDues = TestFinance("income", 30m, "DUES", user: nina, game: game);
+        var otherGameDues = TestFinance("income", 30m, "DUES", user: alex, game: otherGame);
+        var expense = TestFinance("expense", 10m, "PIZZA", game: game);
+        await SeedAsync(memberDues, otherGameDues, expense);
+
+        object ValidMember(long userId, decimal amount = 30m) => new
+        {
+            userId,
+            memberAmount = amount,
+            clubAmount = 20m,
+            description = ""
+        };
+
+        var occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc);
+        var duplicateIds = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactionIds = new[] { memberDues.Id, memberDues.Id },
+                occurredAt,
+                members = new[] { ValidMember(nina.Id) },
+                otherIncomes = Array.Empty<object>()
+            });
+        var duplicateUsers = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactionIds = new[] { memberDues.Id },
+                occurredAt,
+                members = new[] { ValidMember(nina.Id), ValidMember(nina.Id) },
+                otherIncomes = Array.Empty<object>()
+            });
+        var invalidAmount = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactionIds = new[] { memberDues.Id },
+                occurredAt,
+                members = new[] { ValidMember(nina.Id, 30.001m) },
+                otherIncomes = Array.Empty<object>()
+            });
+        var missingUser = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactionIds = new[] { memberDues.Id },
+                occurredAt,
+                members = new[] { ValidMember(nina.Id + 999) },
+                otherIncomes = Array.Empty<object>()
+            });
+        var staleId = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactionIds = new[] { memberDues.Id + 999 },
+                occurredAt,
+                members = new[] { ValidMember(nina.Id) },
+                otherIncomes = Array.Empty<object>()
+            });
+        var wrongGame = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactionIds = new[] { otherGameDues.Id },
+                occurredAt,
+                members = new[] { ValidMember(nina.Id) },
+                otherIncomes = Array.Empty<object>()
+            });
+        var nonEditable = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactionIds = new[] { expense.Id },
+                occurredAt,
+                members = new[] { ValidMember(nina.Id) },
+                otherIncomes = Array.Empty<object>()
+            });
+
+        duplicateIds.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        duplicateUsers.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        invalidAmount.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        missingUser.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        staleId.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        wrongGame.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        nonEditable.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .OrderBy(finance => finance.Id)
+            .ToListAsync());
+        rows.Select(finance => finance.Id).Should().Equal(
+            memberDues.Id,
+            otherGameDues.Id,
+            expense.Id);
+    }
+
+    [Fact]
     public async Task Delete_trips_by_date_deletes_only_trip_rows_for_that_day()
     {
         await SeedAsync(

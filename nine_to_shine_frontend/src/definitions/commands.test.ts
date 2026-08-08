@@ -72,6 +72,30 @@ describe('API command wrappers', () => {
     });
   });
 
+  it('atomically replaces game deposits', async () => {
+    apiModule.api.put.mockResolvedValueOnce({ data: [] });
+    const payload = {
+      transactionIds: [10, 11],
+      occurredAt: '2026-07-01T00:00:00.000Z',
+      members: [
+        {
+          userId: 2,
+          memberAmount: 30,
+          clubAmount: 20,
+          description: 'Nachzahlung',
+        },
+      ],
+      otherIncomes: [{ amount: 5, description: 'Restgeld' }],
+    };
+
+    await apiFinance.replaceGameDeposits(7, payload);
+
+    expect(apiModule.api.put).toHaveBeenCalledWith(
+      '/finance/game/7/deposits/replace',
+      payload
+    );
+  });
+
   it('uses the backend trip deletion route with an ISO date', async () => {
     apiModule.api.delete.mockResolvedValueOnce({});
 

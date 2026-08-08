@@ -446,6 +446,157 @@ namespace NineToShineApi.Controllers
             return NoContent();
         }
 
+        // PUT: api/finance/game/5/deposits/replace
+        // Ersetzt die vom Einzahlungsformular verwalteten Einnahmen atomar.
+        [HttpPut("game/{gameId:long}/deposits/replace")]
+        public async Task<ActionResult<IEnumerable<FinanceDto>>> ReplaceGameDeposits(
+            long gameId,
+            [FromBody] ReplaceGameDepositsRequest body,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            var game = await _db.Game
+                .AsNoTracking()
+                .FirstOrDefaultAsync(g => g.Id == gameId, ct);
+            if (game is null) return NotFound(new { error = "game_id not found." });
+
+            if (!body.OccurredAt.HasValue)
+                return BadRequest(new { error = "occurredAt is required." });
+
+            var transactionIds = body.TransactionIds.Distinct().ToList();
+            if (transactionIds.Count != body.TransactionIds.Count)
+                return BadRequest(new { error = "transactionIds must not contain duplicates." });
+
+            var memberIds = body.Members.Select(member => member.UserId).Distinct().ToList();
+            if (memberIds.Count != body.Members.Count)
+                return BadRequest(new { error = "members must not contain duplicate userIds." });
+
+            if (body.Members.Any(member =>
+                    !IsValidMoneyAmount(member.MemberAmount, allowZero: true) ||
+                    !IsValidMoneyAmount(member.ClubAmount, allowZero: true) ||
+                    (member.MemberAmount == 0 && member.ClubAmount == 0)))
+            {
+                return BadRequest(new
+                {
+                    error = "Member and club amounts must be non-negative, have at most two decimal places, and at least one amount must be greater than 0."
+                });
+            }
+
+            if (body.OtherIncomes.Any(income =>
+                    !IsValidMoneyAmount(income.Amount, allowZero: false)))
+            {
+                return BadRequest(new
+                {
+                    error = "Other income amounts must be greater than 0 and have at most two decimal places."
+                });
+            }
+
+            var members = await _db.Users
+                .AsNoTracking()
+                .Where(user => memberIds.Contains(user.Id))
+                .Select(user => new { user.Id, user.DisplayName })
+                .ToListAsync(ct);
+
+            if (members.Count != memberIds.Count)
+                return BadRequest(new { error = "All member userIds must refer to existing users." });
+
+            var existingTransactions = transactionIds.Count == 0
+                ? []
+                : await _db.Finance
+                    .Where(finance => transactionIds.Contains(finance.Id))
+                    .ToListAsync(ct);
+
+            if (existingTransactions.Count != transactionIds.Count)
+            {
+                return Conflict(new
+                {
+                    error = "One or more finance rows changed after the edit form was loaded. Reload and try again."
+                });
+            }
+
+            if (existingTransactions.Any(finance =>
+                    finance.GameId != gameId ||
+                    finance.Direction != "income" ||
+                    (finance.Category != "DUES" &&
+                     (finance.Category != "OTHER" || finance.UserId != null))))
+            {
+                return BadRequest(new
+                {
+                    error = "Only DUES income and anonymous OTHER income for this game can be replaced."
+                });
+            }
+
+            var memberNames = members.ToDictionary(member => member.Id, member => member.DisplayName);
+            var created = new List<Finance>();
+            var occurredAt = body.OccurredAt.Value;
+
+            foreach (var member in body.Members)
+            {
+                var note = string.IsNullOrWhiteSpace(member.Description)
+                    ? null
+                    : member.Description.Trim();
+                var description = note is null
+                    ? "Mitgliedsbeitrag"
+                    : $"Mitgliedsbeitrag - {note}";
+
+                if (member.MemberAmount > 0)
+                {
+                    created.Add(new Finance
+                    {
+                        OccurredAt = occurredAt,
+                        Direction = "income",
+                        Amount = member.MemberAmount,
+                        Category = "DUES",
+                        Description = description,
+                        UserId = member.UserId,
+                        SeasonId = game.SeasonId,
+                        GameId = game.Id
+                    });
+                }
+
+                if (member.ClubAmount > 0)
+                {
+                    created.Add(new Finance
+                    {
+                        OccurredAt = occurredAt,
+                        Direction = "income",
+                        Amount = member.ClubAmount,
+                        Category = "DUES",
+                        Description = $"{description} ({memberNames[member.UserId]})",
+                        UserId = null,
+                        SeasonId = game.SeasonId,
+                        GameId = game.Id
+                    });
+                }
+            }
+
+            created.AddRange(body.OtherIncomes.Select(income => new Finance
+            {
+                OccurredAt = occurredAt,
+                Direction = "income",
+                Amount = income.Amount,
+                Category = "OTHER",
+                Description = string.IsNullOrWhiteSpace(income.Description)
+                    ? "Sonstige Einnahme"
+                    : income.Description.Trim(),
+                UserId = null,
+                SeasonId = game.SeasonId,
+                GameId = game.Id
+            }));
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+            if (existingTransactions.Count > 0)
+                _db.Finance.RemoveRange(existingTransactions);
+            if (created.Count > 0)
+                _db.Finance.AddRange(created);
+
+            await _db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            return Ok(await GetFinanceDtos(created.Select(finance => finance.Id).ToList(), ct));
+        }
+
         // DELETE: api/finance/trip/by-date?date=2023-01-01
         // Löscht alle TRIP-Transaktionen eines bestimmten Tages
         [HttpDelete("trip/by-date")]
@@ -636,6 +787,14 @@ namespace NineToShineApi.Controllers
                 .ToDictionary(entry => entry.UserId, entry => entry.Amount);
         }
 
+        private static bool IsValidMoneyAmount(decimal amount, bool allowZero)
+        {
+            var minimum = allowZero ? 0m : 0.01m;
+            return amount >= minimum &&
+                   amount <= 1_000_000m &&
+                   amount == decimal.Round(amount, 2);
+        }
+
     }
 
     public record FinanceDto(
@@ -747,5 +906,39 @@ namespace NineToShineApi.Controllers
         [Required]
         [MinLength(1)]
         public List<long> TransactionIds { get; set; } = [];
+    }
+
+    public class ReplaceGameDepositsRequest
+    {
+        [Required]
+        public List<long> TransactionIds { get; set; } = [];
+
+        [Required]
+        public DateTime? OccurredAt { get; set; }
+
+        [Required]
+        public List<GameDepositMemberRequest> Members { get; set; } = [];
+
+        [Required]
+        public List<GameDepositOtherIncomeRequest> OtherIncomes { get; set; } = [];
+    }
+
+    public class GameDepositMemberRequest
+    {
+        [Required]
+        public long UserId { get; set; }
+
+        public decimal MemberAmount { get; set; }
+
+        public decimal ClubAmount { get; set; }
+
+        public string? Description { get; set; }
+    }
+
+    public class GameDepositOtherIncomeRequest
+    {
+        public decimal Amount { get; set; }
+
+        public string? Description { get; set; }
     }
 }

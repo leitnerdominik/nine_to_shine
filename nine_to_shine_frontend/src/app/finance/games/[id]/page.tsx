@@ -39,6 +39,7 @@ import { apiFinance, apiUsers, apiGame } from '@/definitions/commands';
 import type { UserDto, GameDto, FinanceDto } from '@/definitions/types';
 import { routes } from '@/common/routes';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import EditGameDepositsButton from '@/components/EditGameDepositsButton';
 
 // Helper
 const formatCurrency = (val: number) =>
@@ -198,6 +199,7 @@ export default function GamePaymentDetailsPage({
               </Typography>
             </Box>
           </Stack>
+          <EditGameDepositsButton gameId={gameId} />
         </Stack>
 
 

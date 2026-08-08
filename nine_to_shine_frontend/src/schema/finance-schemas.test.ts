@@ -59,6 +59,15 @@ describe('finance form schemas', () => {
         otherIncomes: [],
       }).success
     ).toBe(false);
+
+    expect(
+      depositSchema.safeParse({
+        globalDate: '2026-06-15',
+        seasonId: 3,
+        entries: [],
+        otherIncomes: [{ amount: '-1', description: 'Invalid' }],
+      }).success
+    ).toBe(false);
   });
 
   it('validates trip dates, seasons, base costs, and participants', () => {

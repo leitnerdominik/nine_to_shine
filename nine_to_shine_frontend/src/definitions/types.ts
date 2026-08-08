@@ -138,6 +138,25 @@ export interface CreateFinanceRequest {
 
 export type UpdateFinanceRequest = CreateFinanceRequest;
 
+export interface GameDepositMemberRequest {
+  userId: number;
+  memberAmount: number;
+  clubAmount: number;
+  description?: string;
+}
+
+export interface GameDepositOtherIncomeRequest {
+  amount: number;
+  description?: string;
+}
+
+export interface ReplaceGameDepositsRequest {
+  transactionIds: number[];
+  occurredAt: string;
+  members: GameDepositMemberRequest[];
+  otherIncomes: GameDepositOtherIncomeRequest[];
+}
+
 export interface CreateTripSplitRequest {
   occurredAt?: string;
   direction: 'income' | 'expense';

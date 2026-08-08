@@ -16,6 +16,7 @@ import {
   FinanceDto,
   CreateTripSplitRequest,
   ReplaceTripSplitRequest,
+  ReplaceGameDepositsRequest,
   UpdateFinanceRequest,
   TopRankedDto,
   UpdateOrganizerRotationRequest,
@@ -331,6 +332,21 @@ export const apiFinance = {
   async update(id: number, body: UpdateFinanceRequest): Promise<FinanceDto> {
     try {
       const { data } = await api.put<FinanceDto>(`/finance/${id}`, body);
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
+  async replaceGameDeposits(
+    gameId: number,
+    body: ReplaceGameDepositsRequest
+  ): Promise<FinanceDto[]> {
+    try {
+      const { data } = await api.put<FinanceDto[]>(
+        `/finance/game/${gameId}/deposits/replace`,
+        body
+      );
       return data;
     } catch (e) {
       throw new Error(toErrorMessage(e));

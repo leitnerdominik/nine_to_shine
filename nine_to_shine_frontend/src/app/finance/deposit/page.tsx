@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { Suspense, useEffect, useState, useMemo } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -14,10 +14,11 @@ import {
   CircularProgress,
   Chip,
   MenuItem,
+  Alert,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import AddIcon from '@mui/icons-material/Add';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useSnackbar } from 'notistack';
 
 import Layout from '@/components/Layout';
@@ -33,6 +34,7 @@ import type {
   UserDto,
   SeasonDto,
   GameDto,
+  ReplaceGameDepositsRequest,
 } from '@/definitions/types';
 
 import {
@@ -44,16 +46,46 @@ import {
 import MemberRow from '../../../components/DepositMemberRow';
 import OtherIncomeRow from '../../../components/DepositOtherIncomeRow';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { routes } from '@/common/routes';
+import { buildDepositEditData } from './edit-data';
 
 type FormOutput = FormInput;
 
 export default function BulkDepositPage() {
+  return (
+    <Suspense
+      fallback={
+        <Layout>
+          <LoadingSkeleton />
+        </Layout>
+      }
+    >
+      <BulkDepositForm />
+    </Suspense>
+  );
+}
+
+function BulkDepositForm() {
   const { enqueueSnackbar } = useSnackbar();
   const [loading, setLoading] = useState(true);
   const [seasons, setSeasons] = useState<SeasonDto[]>([]);
   const [games, setGames] = useState<GameDto[]>([]);
+  const [editTransactionIds, setEditTransactionIds] = useState<number[]>([]);
+  const [unmatchedDuesCount, setUnmatchedDuesCount] = useState(0);
+  const [blockingError, setBlockingError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editGameIdParam = searchParams.get('editGameId');
+  const parsedEditGameId = editGameIdParam ? Number(editGameIdParam) : null;
+  const editGameId =
+    parsedEditGameId !== null &&
+    Number.isInteger(parsedEditGameId) &&
+    parsedEditGameId > 0
+      ? parsedEditGameId
+      : null;
+  const isEditMode = editGameIdParam !== null;
 
   // --- Form Setup ---
   const {
@@ -104,14 +136,48 @@ export default function BulkDepositPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [users, fetchedSeasons, fetchedGames] = await Promise.all([
-          apiUsers.getAll(),
-          apiSeason.getAll(),
-          apiGame.getAll(),
-        ]);
+        setLoading(true);
+        setLoadError(null);
+        setEditTransactionIds([]);
+        setUnmatchedDuesCount(0);
+        setBlockingError(null);
+
+        if (isEditMode && editGameId === null) {
+          throw new Error('Ungültige Spiel-ID für die Bearbeitung.');
+        }
+
+        const [users, fetchedSeasons, fetchedGames, gameFinances] =
+          await Promise.all([
+            apiUsers.getAll(),
+            apiSeason.getAll(),
+            apiGame.getAll(),
+            editGameId === null
+              ? Promise.resolve([])
+              : apiFinance.getAll({ gameId: editGameId }),
+          ]);
 
         setSeasons(fetchedSeasons);
         setGames(fetchedGames);
+
+        if (editGameId !== null) {
+          const selectedGame = fetchedGames.find(
+            (game) => game.id === editGameId
+          );
+          if (!selectedGame) {
+            throw new Error('Spiel für die Bearbeitung nicht gefunden.');
+          }
+
+          const editData = buildDepositEditData(
+            users,
+            selectedGame,
+            gameFinances
+          );
+          setEditTransactionIds(editData.transactionIds);
+          setUnmatchedDuesCount(editData.unmatchedDuesCount);
+          setBlockingError(editData.blockingError ?? null);
+          reset(editData.defaultValues);
+          return;
+        }
 
         const highestSeason =
           fetchedSeasons.length > 0
@@ -134,15 +200,20 @@ export default function BulkDepositPage() {
           })),
           otherIncomes: [{ amount: '', description: '' }],
         });
-      } catch {
-        enqueueSnackbar('Daten konnten nicht geladen werden.', {
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Daten konnten nicht geladen werden.';
+        setLoadError(message);
+        enqueueSnackbar(message, {
           variant: 'error',
         });
       } finally {
         setLoading(false);
       }
     })();
-  }, [reset, enqueueSnackbar]);
+  }, [editGameId, enqueueSnackbar, isEditMode, reset]);
 
   // --- Handlers ---
   const handleGameChange = (
@@ -164,6 +235,54 @@ export default function BulkDepositPage() {
 
   // --- Submit ---
   const onSubmit = async (data: FormOutput) => {
+    if (isEditMode && editGameId !== null) {
+      const body: ReplaceGameDepositsRequest = {
+        transactionIds: editTransactionIds,
+        occurredAt: new Date(data.globalDate).toISOString(),
+        members: data.entries
+          .filter((entry) => entry.hasPaid)
+          .map((entry) => ({
+            userId: entry.userId,
+            memberAmount: parseFloat(entry.memberAmount),
+            clubAmount: parseFloat(entry.clubAmount),
+            description: entry.description?.trim() || undefined,
+          })),
+        otherIncomes: data.otherIncomes
+          .map((income) => ({
+            amount: parseFloat(income.amount || '0'),
+            description: income.description?.trim() || undefined,
+          }))
+          .filter((income) => income.amount !== 0),
+      };
+
+      if (
+        body.transactionIds.length === 0 &&
+        body.members.length === 0 &&
+        body.otherIncomes.length === 0
+      ) {
+        enqueueSnackbar('Keine Änderungen zum Speichern vorhanden.', {
+          variant: 'warning',
+        });
+        return;
+      }
+
+      try {
+        await apiFinance.replaceGameDeposits(editGameId, body);
+        enqueueSnackbar('Spielbeiträge erfolgreich aktualisiert!', {
+          variant: 'success',
+        });
+        router.push(`${routes.financesGames}/${editGameId}`);
+      } catch (error) {
+        enqueueSnackbar(
+          error instanceof Error
+            ? error.message
+            : 'Fehler beim Aktualisieren der Spielbeiträge.',
+          { variant: 'error' }
+        );
+      }
+      return;
+    }
+
     const promises: Promise<CreateFinanceRequest>[] = [];
     let countMembers = 0;
     let countOther = 0;
@@ -266,6 +385,35 @@ export default function BulkDepositPage() {
     );
   }
 
+  if (loadError) {
+    return (
+      <Layout>
+        <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
+          <Alert
+            severity="error"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() =>
+                  router.push(
+                    editGameId === null
+                      ? routes.financesGames
+                      : `${routes.financesGames}/${editGameId}`
+                  )
+                }
+              >
+                Zurück
+              </Button>
+            }
+          >
+            {loadError}
+          </Alert>
+        </Box>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <Box
@@ -282,7 +430,13 @@ export default function BulkDepositPage() {
             mb: 2,
           }}
         >
-          <CustomTitle text="Mitgliedsbeiträge einfügen" />
+          <CustomTitle
+            text={
+              isEditMode
+                ? 'Mitgliedsbeiträge bearbeiten'
+                : 'Mitgliedsbeiträge einfügen'
+            }
+          />
         </Box>
 
         <Box
@@ -307,6 +461,23 @@ export default function BulkDepositPage() {
             sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}
           />
         </Box>
+
+        {blockingError && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {blockingError}
+          </Alert>
+        )}
+
+        {unmatchedDuesCount > 0 && (
+          <Alert severity="info" sx={{ mb: 3 }}>
+            {unmatchedDuesCount}{' '}
+            {unmatchedDuesCount === 1
+              ? 'älterer Vereinsbeitrag konnte'
+              : 'ältere Vereinsbeiträge konnten'}{' '}
+            keinem Mitglied eindeutig zugeordnet werden und{' '}
+            {unmatchedDuesCount === 1 ? 'bleibt' : 'bleiben'} unverändert.
+          </Alert>
+        )}
 
         {/* --- OBERER BEREICH --- */}
         <Paper
@@ -338,6 +509,7 @@ export default function BulkDepositPage() {
                     onChange={(e) => field.onChange(Number(e.target.value))}
                     error={!!errors.seasonId}
                     helperText={errors.seasonId?.message}
+                    disabled={isEditMode}
                   >
                     {seasons.map((s) => (
                       <MenuItem key={s.id} value={s.id}>
@@ -362,7 +534,11 @@ export default function BulkDepositPage() {
                       const newGameId = Number(e.target.value) || undefined;
                       handleGameChange(newGameId, field.onChange);
                     }}
-                    disabled={!selectedSeasonId || availableGames.length === 0}
+                    disabled={
+                      isEditMode ||
+                      !selectedSeasonId ||
+                      availableGames.length === 0
+                    }
                   >
                     <MenuItem value="">
                       <em>Kein Spiel</em>
@@ -447,11 +623,24 @@ export default function BulkDepositPage() {
           justifyContent="flex-end"
           sx={{ mt: 3 }}
         >
+          {isEditMode && editGameId !== null && (
+            <Button
+              type="button"
+              variant="outlined"
+              size="large"
+              disabled={isSubmitting}
+              onClick={() =>
+                router.push(`${routes.financesGames}/${editGameId}`)
+              }
+            >
+              Abbrechen
+            </Button>
+          )}
           <Button
             type="submit"
             variant="contained"
             size="large"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !!blockingError}
             startIcon={
               isSubmitting ? (
                 <CircularProgress size={18} color="inherit" />
@@ -461,7 +650,13 @@ export default function BulkDepositPage() {
             }
             sx={{ px: 4 }}
           >
-            {isSubmitting ? 'wird eingetragen...' : 'Speichern'}
+            {isSubmitting
+              ? isEditMode
+                ? 'wird aktualisiert...'
+                : 'wird eingetragen...'
+              : isEditMode
+              ? 'Änderungen speichern'
+              : 'Speichern'}
           </Button>
         </Stack>
       </Box>
