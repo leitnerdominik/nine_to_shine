@@ -62,6 +62,16 @@ describe('API command wrappers', () => {
     });
   });
 
+  it('loads dues status for the selected season', async () => {
+    apiModule.api.get.mockResolvedValueOnce({ data: [] });
+
+    await apiFinance.getDuesStatus(7);
+
+    expect(apiModule.api.get).toHaveBeenCalledWith('/finance/dues-status', {
+      params: { seasonId: 7 },
+    });
+  });
+
   it('uses the backend trip deletion route with an ISO date', async () => {
     apiModule.api.delete.mockResolvedValueOnce({});
 

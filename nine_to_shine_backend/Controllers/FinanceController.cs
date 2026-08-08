@@ -67,6 +67,87 @@ namespace NineToShineApi.Controllers
             return Ok(list);
         }
 
+        // GET: api/finance/dues-status?seasonId=1
+        [HttpGet("dues-status")]
+        public async Task<ActionResult<IEnumerable<GameDuesStatusDto>>> GetDuesStatus(
+            [FromQuery] long? seasonId,
+            CancellationToken ct)
+        {
+            var now = DateTime.UtcNow;
+            var gamesQuery = _db.Game
+                .AsNoTracking()
+                .Where(g => g.PlayedAt <= now);
+
+            if (seasonId.HasValue)
+                gamesQuery = gamesQuery.Where(g => g.SeasonId == seasonId.Value);
+
+            var games = await gamesQuery
+                .OrderByDescending(g => g.PlayedAt)
+                .Select(g => new
+                {
+                    g.Id,
+                    g.SeasonId,
+                    g.PlayedAt,
+                    g.GameName
+                })
+                .ToListAsync(ct);
+
+            if (games.Count == 0)
+                return Ok(Array.Empty<GameDuesStatusDto>());
+
+            var activeMembers = await _db.Users
+                .AsNoTracking()
+                .Where(u => u.IsActive)
+                .OrderBy(u => u.DisplayName)
+                .ThenBy(u => u.Id)
+                .Select(u => new
+                {
+                    u.Id,
+                    u.DisplayName
+                })
+                .ToListAsync(ct);
+
+            var gameIds = games.Select(g => g.Id).ToList();
+            var activeMemberIds = activeMembers.Select(u => u.Id).ToList();
+            var paidPairs = activeMemberIds.Count == 0
+                ? []
+                : await _db.Finance
+                    .AsNoTracking()
+                    .Where(f =>
+                        f.GameId.HasValue && gameIds.Contains(f.GameId.Value) &&
+                        f.UserId.HasValue && activeMemberIds.Contains(f.UserId.Value) &&
+                        f.Direction == "income" &&
+                        f.Category == "DUES" &&
+                        f.Amount > 0)
+                    .Select(f => new { GameId = f.GameId!.Value, UserId = f.UserId!.Value })
+                    .Distinct()
+                    .ToListAsync(ct);
+
+            var paidLookup = paidPairs
+                .Select(pair => (pair.GameId, pair.UserId))
+                .ToHashSet();
+
+            var result = games.Select(game =>
+            {
+                var unpaidMembers = activeMembers
+                    .Where(member => !paidLookup.Contains((game.Id, member.Id)))
+                    .Select(member => new UnpaidDuesMemberDto(member.Id, member.DisplayName))
+                    .ToList();
+
+                return new GameDuesStatusDto(
+                    game.Id,
+                    game.SeasonId,
+                    game.PlayedAt,
+                    game.GameName,
+                    activeMembers.Count,
+                    activeMembers.Count - unpaidMembers.Count,
+                    unpaidMembers
+                );
+            }).ToList();
+
+            return Ok(result);
+        }
+
         // GET: api/finance/balance/global
         // Der reale Kassenstand des Vereins (Alle Einnahmen - Alle Ausgaben)
         [HttpGet("balance/global")]
@@ -569,6 +650,21 @@ namespace NineToShineApi.Controllers
         long? SeasonId,
         long? GameId,
         string? GameName
+    );
+
+    public record UnpaidDuesMemberDto(
+        long UserId,
+        string DisplayName
+    );
+
+    public record GameDuesStatusDto(
+        long GameId,
+        long SeasonId,
+        DateTime PlayedAt,
+        string GameName,
+        int ActiveMemberCount,
+        int PaidMemberCount,
+        IReadOnlyList<UnpaidDuesMemberDto> UnpaidMembers
     );
 
     public class CreateFinanceRequest

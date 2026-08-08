@@ -12,6 +12,7 @@ import {
   CreateOrganizerDutyRequest,
   OrganizerRotationMemberDto,
   CreateFinanceRequest,
+  GameDuesStatusDto,
   FinanceDto,
   CreateTripSplitRequest,
   ReplaceTripSplitRequest,
@@ -291,6 +292,18 @@ export const apiFinance = {
   }): Promise<FinanceDto[]> {
     try {
       const { data } = await api.get<FinanceDto[]>('/finance', { params });
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
+  async getDuesStatus(seasonId?: number): Promise<GameDuesStatusDto[]> {
+    try {
+      const { data } = await api.get<GameDuesStatusDto[]>(
+        '/finance/dues-status',
+        { params: seasonId === undefined ? undefined : { seasonId } }
+      );
       return data;
     } catch (e) {
       throw new Error(toErrorMessage(e));

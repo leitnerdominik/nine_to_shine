@@ -91,6 +91,91 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Dues_status_returns_played_games_and_only_counts_qualifying_member_payments()
+    {
+        var nina = TestUser("Nina", "nina@example.test");
+        var alex = TestUser("Alex", "alex@example.test");
+        var inactive = TestUser("Inactive", "inactive@example.test");
+        inactive.IsActive = false;
+        var selectedSeason = TestSeason(1);
+        var otherSeason = TestSeason(2);
+        var openGame = TestGame(
+            selectedSeason,
+            nina,
+            "Open game",
+            new DateTime(2026, 6, 15, 18, 0, 0, DateTimeKind.Utc));
+        var settledGame = TestGame(
+            selectedSeason,
+            nina,
+            "Settled game",
+            new DateTime(2026, 7, 15, 18, 0, 0, DateTimeKind.Utc));
+        var gameWithoutBookings = TestGame(
+            selectedSeason,
+            nina,
+            "No bookings game",
+            new DateTime(2026, 5, 15, 18, 0, 0, DateTimeKind.Utc));
+        var futureGame = TestGame(
+            selectedSeason,
+            nina,
+            "Future game",
+            new DateTime(2100, 1, 1, 18, 0, 0, DateTimeKind.Utc));
+        var otherSeasonGame = TestGame(
+            otherSeason,
+            nina,
+            "Other season game",
+            new DateTime(2026, 5, 15, 18, 0, 0, DateTimeKind.Utc));
+
+        await SeedAsync(
+            nina,
+            alex,
+            inactive,
+            selectedSeason,
+            otherSeason,
+            openGame,
+            settledGame,
+            gameWithoutBookings,
+            futureGame,
+            otherSeasonGame);
+
+        await SeedAsync(
+            TestFinance("income", 1m, "DUES", user: nina, game: openGame),
+            TestFinance("income", 30m, "OTHER", user: alex, game: openGame),
+            TestFinance("expense", 30m, "DUES", user: alex, game: openGame),
+            TestFinance("income", 20m, "DUES", game: openGame),
+            TestFinance("income", 30m, "DUES", user: inactive, game: openGame),
+            TestFinance("income", 30m, "DUES", user: nina, game: settledGame),
+            TestFinance("income", 30m, "DUES", user: alex, game: settledGame));
+
+        var response = await Client.GetFromJsonAsync<List<GameDuesStatusDto>>(
+            $"/api/finance/dues-status?seasonId={selectedSeason.Id}");
+
+        response.Should().NotBeNull();
+        var statuses = response!;
+        statuses.Select(game => game.GameName).Should().Equal(
+            "Settled game",
+            "Open game",
+            "No bookings game");
+
+        var openStatus = statuses.Single(game => game.GameName == "Open game");
+        openStatus.ActiveMemberCount.Should().Be(2);
+        openStatus.PaidMemberCount.Should().Be(1);
+        openStatus.UnpaidMembers.Should().ContainSingle();
+        openStatus.UnpaidMembers[0].UserId.Should().Be(alex.Id);
+        openStatus.UnpaidMembers[0].DisplayName.Should().Be("Alex");
+
+        var settledStatus = statuses.Single(game => game.GameName == "Settled game");
+        settledStatus.ActiveMemberCount.Should().Be(2);
+        settledStatus.PaidMemberCount.Should().Be(2);
+        settledStatus.UnpaidMembers.Should().BeEmpty();
+
+        var noBookingsStatus = statuses.Single(game => game.GameName == "No bookings game");
+        noBookingsStatus.ActiveMemberCount.Should().Be(2);
+        noBookingsStatus.PaidMemberCount.Should().Be(0);
+        noBookingsStatus.UnpaidMembers.Select(member => member.DisplayName)
+            .Should().Equal("Alex", "Nina");
+    }
+
+    [Fact]
     public async Task Delete_trips_by_date_deletes_only_trip_rows_for_that_day()
     {
         await SeedAsync(

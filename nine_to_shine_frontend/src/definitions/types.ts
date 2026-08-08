@@ -110,6 +110,21 @@ export interface FinanceDto {
   gameName?: string;
 }
 
+export interface UnpaidDuesMemberDto {
+  userId: number;
+  displayName: string;
+}
+
+export interface GameDuesStatusDto {
+  gameId: number;
+  seasonId: number;
+  playedAt: string;
+  gameName: string;
+  activeMemberCount: number;
+  paidMemberCount: number;
+  unpaidMembers: UnpaidDuesMemberDto[];
+}
+
 export interface CreateFinanceRequest {
   occurredAt?: string;
   direction: 'income' | 'expense';
