@@ -1,8 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using NineToShineApi.Controllers;
+using NineToShineApi.Data;
 using NineToShineApi.Tests.Support;
 
 namespace NineToShineApi.Tests;
@@ -433,6 +436,53 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Replace_game_deposits_returns_conflict_when_rows_change_during_save()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, nina);
+        await SeedAsync(nina, season, game);
+
+        var memberDues = TestFinance("income", 30m, "DUES", user: nina, game: game);
+        await SeedAsync(memberDues);
+
+        var connectionString = await WithDbContextAsync(db =>
+            Task.FromResult(db.Database.GetConnectionString()));
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString!)
+            .AddInterceptors(new ConcurrencyFailureInterceptor())
+            .Options;
+
+        await using var db = new AppDbContext(options);
+        var controller = new FinanceController(db);
+        var response = await controller.ReplaceGameDeposits(
+            game.Id,
+            new ReplaceGameDepositsRequest
+            {
+                TransactionIds = [memberDues.Id],
+                OccurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+                Members =
+                [
+                    new GameDepositMemberRequest
+                    {
+                        UserId = nina.Id,
+                        MemberAmount = 60m,
+                        ClubAmount = 40m
+                    }
+                ]
+            },
+            CancellationToken.None);
+
+        response.Result.Should().BeOfType<ConflictObjectResult>();
+
+        var rows = await WithDbContextAsync(context => context.Finance
+            .AsNoTracking()
+            .ToListAsync());
+        rows.Should().ContainSingle(finance =>
+            finance.Id == memberDues.Id && finance.Amount == 30m);
+    }
+
+    [Fact]
     public async Task Delete_trips_by_date_deletes_only_trip_rows_for_that_day()
     {
         await SeedAsync(
@@ -646,5 +696,17 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         missingUser.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         invalidSeason.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         nonTripReplace.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    private sealed class ConcurrencyFailureInterceptor : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            return ValueTask.FromException<InterceptionResult<int>>(
+                new DbUpdateConcurrencyException());
+        }
     }
 }

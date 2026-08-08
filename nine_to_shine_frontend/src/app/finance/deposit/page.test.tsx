@@ -189,6 +189,42 @@ describe('BulkDepositPage edit mode', () => {
     );
   });
 
+  it('submits aggregated cent amounts without floating-point drift', async () => {
+    const browser = userEvent.setup();
+    mocks.getFinances.mockResolvedValueOnce([
+      { ...finances[0], amount: 0.1 },
+      { ...finances[0], id: 23, amount: 0.2 },
+      { ...finances[1], amount: 0.1 },
+      { ...finances[1], id: 24, amount: 0.2 },
+    ]);
+    renderWithProviders(<BulkDepositPage />);
+
+    expect(
+      await screen.findByRole('spinbutton', { name: 'Gutschrift' })
+    ).toHaveValue(0.3);
+    expect(screen.getByRole('spinbutton', { name: 'Kasse' })).toHaveValue(0.3);
+
+    await browser.click(
+      screen.getByRole('button', { name: 'Änderungen speichern' })
+    );
+
+    await waitFor(() =>
+      expect(mocks.replaceGameDeposits).toHaveBeenCalledWith(
+        10,
+        expect.objectContaining({
+          members: [
+            {
+              userId: 1,
+              memberAmount: 0.3,
+              clubAmount: 0.3,
+              description: 'Bar',
+            },
+          ],
+        })
+      )
+    );
+  });
+
   it('cancels back to the game detail without saving', async () => {
     const browser = userEvent.setup();
     renderWithProviders(<BulkDepositPage />);

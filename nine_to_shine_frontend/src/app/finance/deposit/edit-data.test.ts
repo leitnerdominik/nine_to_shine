@@ -110,6 +110,34 @@ describe('buildDepositEditData', () => {
     });
   });
 
+  it('aggregates member and club amounts in integer cents', () => {
+    const result = buildDepositEditData(users, game, [
+      finance(1, {
+        userId: 1,
+        amount: 0.1,
+        description: 'Mitgliedsbeitrag',
+      }),
+      finance(2, {
+        userId: 1,
+        amount: 0.2,
+        description: 'Mitgliedsbeitrag',
+      }),
+      finance(3, {
+        amount: 0.1,
+        description: 'Mitgliedsbeitrag (Nina)',
+      }),
+      finance(4, {
+        amount: 0.2,
+        description: 'Mitgliedsbeitrag (Nina)',
+      }),
+    ]);
+
+    expect(result.defaultValues.entries[0]).toMatchObject({
+      memberAmount: '0.3',
+      clubAmount: '0.3',
+    });
+  });
+
   it('blocks editing when represented rows have different dates', () => {
     const result = buildDepositEditData(users, game, [
       finance(1, { userId: 1, amount: 30 }),

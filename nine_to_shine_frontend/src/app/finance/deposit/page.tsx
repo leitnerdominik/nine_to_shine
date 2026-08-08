@@ -50,6 +50,7 @@ import { routes } from '@/common/routes';
 import { buildDepositEditData } from './edit-data';
 
 type FormOutput = FormInput;
+const toMoneyAmount = (value: string) => Math.round(Number(value) * 100) / 100;
 
 export default function BulkDepositPage() {
   return (
@@ -243,8 +244,8 @@ function BulkDepositForm() {
           .filter((entry) => entry.hasPaid)
           .map((entry) => ({
             userId: entry.userId,
-            memberAmount: Number(entry.memberAmount),
-            clubAmount: Number(entry.clubAmount),
+            memberAmount: toMoneyAmount(entry.memberAmount),
+            clubAmount: toMoneyAmount(entry.clubAmount),
             description: entry.description?.trim() || undefined,
           })),
         otherIncomes: data.otherIncomes

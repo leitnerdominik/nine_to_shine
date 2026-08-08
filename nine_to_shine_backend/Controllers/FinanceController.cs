@@ -586,13 +586,24 @@ namespace NineToShineApi.Controllers
             }));
 
             await using var transaction = await _db.Database.BeginTransactionAsync(ct);
-            if (existingTransactions.Count > 0)
-                _db.Finance.RemoveRange(existingTransactions);
-            if (created.Count > 0)
-                _db.Finance.AddRange(created);
+            try
+            {
+                if (existingTransactions.Count > 0)
+                    _db.Finance.RemoveRange(existingTransactions);
+                if (created.Count > 0)
+                    _db.Finance.AddRange(created);
 
-            await _db.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
+                await _db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync(ct);
+                return Conflict(new
+                {
+                    error = "One or more finance rows changed while the replacement was being saved. Reload and try again."
+                });
+            }
 
             return Ok(await GetFinanceDtos(created.Select(finance => finance.Id).ToList(), ct));
         }

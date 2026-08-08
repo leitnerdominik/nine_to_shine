@@ -13,6 +13,12 @@ const BASE_DESCRIPTION = 'Mitgliedsbeitrag';
 const NOTE_PREFIX = `${BASE_DESCRIPTION} - `;
 
 const toDateInput = (value: string) => new Date(value).toISOString().slice(0, 10);
+const sumMoney = (transactions: FinanceDto[]) =>
+  transactions.reduce(
+    (totalCents, transaction) =>
+      totalCents + Math.round(transaction.amount * 100),
+    0
+  ) / 100;
 
 const parseMemberNote = (description?: string): string | null => {
   const normalized = description?.trim() ?? '';
@@ -102,14 +108,8 @@ export function buildDepositEditData(
       blockingError = `Die Beschreibung der Beiträge für ${user.displayName} ist nicht eindeutig.`;
     }
 
-    const memberAmount = userMemberDues.reduce(
-      (total, transaction) => total + transaction.amount,
-      0
-    );
-    const clubAmount = userClubDues.reduce(
-      (total, transaction) => total + transaction.amount,
-      0
-    );
+    const memberAmount = sumMoney(userMemberDues);
+    const clubAmount = sumMoney(userClubDues);
     const hasPaid = memberAmount > 0 || clubAmount > 0;
 
     return {
