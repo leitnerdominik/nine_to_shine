@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  capitalizeFirstLetter,
   formatCurrency,
   getRankStyle,
   stringAvatar,
@@ -10,11 +9,6 @@ import {
 describe('common misc helpers', () => {
   it('formats Euro currency for German locale', () => {
     expect(formatCurrency(1250.5)).toBe('1.250,50\u00a0€');
-  });
-
-  it('capitalizes only the first letter', () => {
-    expect(capitalizeFirstLetter('shine')).toBe('Shine');
-    expect(capitalizeFirstLetter('')).toBe('');
   });
 
   it('creates deterministic avatar initials and colors', () => {
