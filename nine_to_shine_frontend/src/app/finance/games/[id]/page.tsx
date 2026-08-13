@@ -20,6 +20,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Alert,
 } from '@mui/material';
 import Grid2 from '@mui/material/Grid2';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -40,6 +41,7 @@ import type { UserDto, GameDto, FinanceDto } from '@/definitions/types';
 import { routes } from '@/common/routes';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import EditGameDepositsButton from '@/components/EditGameDepositsButton';
+import { isConflictError } from '@/definitions/api';
 
 // Helper
 const formatCurrency = (val: number) =>
@@ -70,12 +72,16 @@ export default function GamePaymentDetailsPage({
   const [playerRows, setPlayerRows] = useState<PaymentRow[]>([]);
   const [otherIncomeList, setOtherIncomeList] = useState<FinanceDto[]>([]); // NEU: Einnahmen ohne User
   const [expenseList, setExpenseList] = useState<FinanceDto[]>([]);
+  const [financeTransactions, setFinanceTransactions] = useState<FinanceDto[]>(
+    []
+  );
 
   // Stats
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpense, setTotalExpense] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [conflictError, setConflictError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -106,6 +112,8 @@ export default function GamePaymentDetailsPage({
 
       setExpenseList(expenseTx);
       setOtherIncomeList(otherIncomeTx);
+      setFinanceTransactions(gameFinances);
+      setConflictError(null);
 
       // 4. Spieler Tabelle aufbauen (Wer hat gezahlt?)
       const pRows: PaymentRow[] = allUsers.map((user) => {
@@ -147,11 +155,20 @@ export default function GamePaymentDetailsPage({
     setDeleteDialogOpen(false);
     try {
       setLoading(true);
-      await apiFinance.deleteByGameId(gameId);
+      await apiFinance.deleteByGameId(
+        gameId,
+        financeTransactions.map(({ id, updatedAt }) => ({ id, updatedAt }))
+      );
       router.push(routes.financesGames);
     } catch (err) {
       console.error(err);
-      setErrorDialogOpen(true);
+      if (isConflictError(err)) {
+        setConflictError(
+          'Die Finanzdaten wurden inzwischen geändert. Lade die aktuellen Daten neu.'
+        );
+      } else {
+        setErrorDialogOpen(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -201,6 +218,24 @@ export default function GamePaymentDetailsPage({
           </Stack>
           <EditGameDepositsButton gameId={gameId} />
         </Stack>
+
+        {conflictError && (
+          <Alert
+            severity="warning"
+            sx={{ mb: 3 }}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => void fetchData()}
+              >
+                Neu laden
+              </Button>
+            }
+          >
+            {conflictError}
+          </Alert>
+        )}
 
 
         {/* --- STATISTIK KARTEN --- */}

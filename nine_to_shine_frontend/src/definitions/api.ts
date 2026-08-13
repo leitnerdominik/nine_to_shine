@@ -52,3 +52,21 @@ export const toErrorMessage = (err: unknown): string => {
   if (err instanceof Error) return err.message;
   return 'Request failed';
 };
+
+export class ApiRequestError extends Error {
+  constructor(message: string, public readonly status?: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+  }
+}
+
+export const toApiRequestError = (err: unknown): ApiRequestError => {
+  if (err instanceof ApiRequestError) return err;
+  return new ApiRequestError(
+    toErrorMessage(err),
+    axios.isAxiosError(err) ? err.response?.status : undefined
+  );
+};
+
+export const isConflictError = (err: unknown): err is ApiRequestError =>
+  err instanceof ApiRequestError && err.status === 409;

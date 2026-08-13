@@ -11,6 +11,9 @@ const apiModule = vi.hoisted(() => ({
   toErrorMessage: vi.fn((err: unknown) =>
     err instanceof Error ? err.message : 'Request failed'
   ),
+  toApiRequestError: vi.fn((err: unknown) =>
+    err instanceof Error ? err : new Error('Request failed')
+  ),
 }));
 
 vi.mock('./api', () => apiModule);
@@ -75,7 +78,10 @@ describe('API command wrappers', () => {
   it('atomically replaces game deposits', async () => {
     apiModule.api.put.mockResolvedValueOnce({ data: [] });
     const payload = {
-      transactionIds: [10, 11],
+      transactions: [
+        { id: 10, updatedAt: '2026-07-01T09:00:00.000Z' },
+        { id: 11, updatedAt: '2026-07-01T09:00:01.000Z' },
+      ],
       occurredAt: '2026-07-01T00:00:00.000Z',
       members: [
         {
@@ -99,10 +105,17 @@ describe('API command wrappers', () => {
   it('uses the backend trip deletion route with an ISO date', async () => {
     apiModule.api.delete.mockResolvedValueOnce({});
 
-    await apiFinance.deleteTripsByDate(new Date('2026-06-15T12:30:00.000Z'));
+    const transactions = [
+      { id: 10, updatedAt: '2026-06-15T13:00:00.000Z' },
+    ];
+    await apiFinance.deleteTripsByDate(
+      new Date('2026-06-15T12:30:00.000Z'),
+      transactions
+    );
 
     expect(apiModule.api.delete).toHaveBeenCalledWith(
-      '/finance/trip/by-date?date=2026-06-15T12:30:00.000Z'
+      '/finance/trip/by-date?date=2026-06-15T12:30:00.000Z',
+      { data: { transactions } }
     );
   });
 
@@ -130,7 +143,10 @@ describe('API command wrappers', () => {
     apiModule.api.post.mockResolvedValueOnce({ data: [] });
 
     const payload = {
-      transactionIds: [10, 11],
+      transactions: [
+        { id: 10, updatedAt: '2026-06-15T13:00:00.000Z' },
+        { id: 11, updatedAt: '2026-06-15T13:00:01.000Z' },
+      ],
       occurredAt: '2026-06-15T12:30:00.000Z',
       direction: 'expense' as const,
       amount: 10,

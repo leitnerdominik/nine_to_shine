@@ -98,6 +98,7 @@ export interface GenerateOrganizerDutiesResponse {
 
 export interface FinanceDto {
   id: number;
+  updatedAt: string;
   occurredAt: string;
   direction: 'income' | 'expense';
   amount: number;
@@ -136,7 +137,18 @@ export interface CreateFinanceRequest {
   gameId?: number;
 }
 
-export type UpdateFinanceRequest = CreateFinanceRequest;
+export interface UpdateFinanceRequest extends CreateFinanceRequest {
+  updatedAt: string;
+}
+
+export interface FinanceVersionReference {
+  id: number;
+  updatedAt: string;
+}
+
+export interface FinanceVersionReferencesRequest {
+  transactions: FinanceVersionReference[];
+}
 
 export interface GameDepositMemberRequest {
   userId: number;
@@ -151,7 +163,7 @@ export interface GameDepositOtherIncomeRequest {
 }
 
 export interface ReplaceGameDepositsRequest {
-  transactionIds: number[];
+  transactions: FinanceVersionReference[];
   occurredAt: string;
   members: GameDepositMemberRequest[];
   otherIncomes: GameDepositOtherIncomeRequest[];
@@ -167,7 +179,7 @@ export interface CreateTripSplitRequest {
 }
 
 export interface ReplaceTripSplitRequest extends CreateTripSplitRequest {
-  transactionIds: number[];
+  transactions: FinanceVersionReference[];
 }
 
 export interface TopRankedDto {

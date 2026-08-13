@@ -60,7 +60,8 @@ namespace NineToShineApi.Controllers
                 .Select(f => new FinanceDto(
                     f.Id, f.OccurredAt, f.Direction, f.Amount, f.Category, f.Description,
                     f.UserId, f.User != null ? f.User.DisplayName : null,
-                    f.SeasonId, f.GameId, f.Game != null ? f.Game.GameName : null
+                    f.SeasonId, f.GameId, f.Game != null ? f.Game.GameName : null,
+                    f.UpdatedAt
                 ))
                 .ToListAsync(ct);
 
@@ -245,7 +246,8 @@ namespace NineToShineApi.Controllers
                 f.User?.DisplayName,
                 f.SeasonId,
                 f.GameId,
-                f.Game?.GameName
+                f.Game?.GameName,
+                f.UpdatedAt
             ));
         }
 
@@ -327,7 +329,8 @@ namespace NineToShineApi.Controllers
                 userDisplayName,
                 entity.SeasonId,
                 entity.GameId,
-                gameName
+                gameName,
+                entity.UpdatedAt
             );
 
             return CreatedAtAction(nameof(GetById), new { id = entity.Id }, dto);
@@ -342,8 +345,15 @@ namespace NineToShineApi.Controllers
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             var entity = await _db.Finance.FindAsync(new object[] { id }, ct);
             if (entity is null) return NotFound();
+
+            if (!body.UpdatedAt.HasValue ||
+                !MatchesExpectedVersion(entity, body.UpdatedAt.Value))
+            {
+                return FinanceConflict();
+            }
 
             var dir = body.Direction.ToLowerInvariant();
             if (dir != "income" && dir != "expense")
@@ -379,7 +389,16 @@ namespace NineToShineApi.Controllers
             entity.SeasonId = body.SeasonId;
             entity.GameId = body.GameId;
 
-            await _db.SaveChangesAsync(ct);
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync(ct);
+                return FinanceConflict();
+            }
 
             string? userDisplayName = null;
             if (entity.UserId.HasValue)
@@ -410,27 +429,88 @@ namespace NineToShineApi.Controllers
                 userDisplayName,
                 entity.SeasonId,
                 entity.GameId,
-                gameName
+                gameName,
+                entity.UpdatedAt
             ));
         }
 
         // DELETE: api/finance/123
         [HttpDelete("{id:long}")]
-        public async Task<IActionResult> Delete(long id, CancellationToken ct)
+        public async Task<IActionResult> Delete(
+            long id,
+            [FromQuery, Required] DateTimeOffset? updatedAt,
+            CancellationToken ct)
         {
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             var entity = await _db.Finance.FindAsync(new object[] { id }, ct);
             if (entity is null) return NotFound();
 
-            _db.Finance.Remove(entity);
-            await _db.SaveChangesAsync(ct);
+            if (!updatedAt.HasValue || !MatchesExpectedVersion(entity, updatedAt.Value))
+                return FinanceConflict();
+
+            try
+            {
+                _db.Finance.Remove(entity);
+                await _db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync(ct);
+                return FinanceConflict();
+            }
+
+            return NoContent();
+        }
+
+        // POST: api/finance/bulk-delete
+        [HttpPost("bulk-delete")]
+        public async Task<IActionResult> BulkDelete(
+            [FromBody] FinanceVersionReferencesRequest body,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            var duplicateError = ValidateVersionReferences(body.Transactions);
+            if (duplicateError is not null) return duplicateError;
+
+            var ids = body.Transactions.Select(reference => reference.Id).ToList();
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+            var rows = await _db.Finance
+                .Where(finance => ids.Contains(finance.Id))
+                .ToListAsync(ct);
+
+            if (!VersionsMatch(rows, body.Transactions)) return FinanceConflict();
+
+            try
+            {
+                _db.Finance.RemoveRange(rows);
+                await _db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync(ct);
+                return FinanceConflict();
+            }
+
             return NoContent();
         }
 
         // DELETE: api/finance/by-game/5
         // Löscht alle Transaktionen eines bestimmten Spiels
         [HttpDelete("by-game/{gameId:long}")]
-        public async Task<IActionResult> DeleteByGameId(long gameId, CancellationToken ct)
+        public async Task<IActionResult> DeleteByGameId(
+            long gameId,
+            [FromBody] FinanceVersionReferencesRequest body,
+            CancellationToken ct)
         {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            var duplicateError = ValidateVersionReferences(body.Transactions);
+            if (duplicateError is not null) return duplicateError;
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             var transactions = await _db.Finance
                 .Where(f => f.GameId == gameId)
                 .ToListAsync(ct);
@@ -440,8 +520,19 @@ namespace NineToShineApi.Controllers
                 return NotFound();
             }
 
-            _db.Finance.RemoveRange(transactions);
-            await _db.SaveChangesAsync(ct);
+            if (!VersionsMatch(transactions, body.Transactions)) return FinanceConflict();
+
+            try
+            {
+                _db.Finance.RemoveRange(transactions);
+                await _db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync(ct);
+                return FinanceConflict();
+            }
 
             return NoContent();
         }
@@ -464,9 +555,12 @@ namespace NineToShineApi.Controllers
             if (!body.OccurredAt.HasValue)
                 return BadRequest(new { error = "occurredAt is required." });
 
-            var transactionIds = body.TransactionIds.Distinct().ToList();
-            if (transactionIds.Count != body.TransactionIds.Count)
-                return BadRequest(new { error = "transactionIds must not contain duplicates." });
+            var duplicateError = ValidateVersionReferences(body.Transactions);
+            if (duplicateError is not null) return duplicateError;
+
+            var transactionIds = body.Transactions
+                .Select(reference => reference.Id)
+                .ToList();
 
             var memberIds = body.Members.Select(member => member.UserId).Distinct().ToList();
             if (memberIds.Count != body.Members.Count)
@@ -501,19 +595,15 @@ namespace NineToShineApi.Controllers
             if (members.Count != memberIds.Count)
                 return BadRequest(new { error = "All member userIds must refer to existing users." });
 
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             var existingTransactions = transactionIds.Count == 0
                 ? []
                 : await _db.Finance
                     .Where(finance => transactionIds.Contains(finance.Id))
                     .ToListAsync(ct);
 
-            if (existingTransactions.Count != transactionIds.Count)
-            {
-                return Conflict(new
-                {
-                    error = "One or more finance rows changed after the edit form was loaded. Reload and try again."
-                });
-            }
+            if (!VersionsMatch(existingTransactions, body.Transactions))
+                return FinanceConflict();
 
             if (existingTransactions.Any(finance =>
                     finance.GameId != gameId ||
@@ -585,7 +675,6 @@ namespace NineToShineApi.Controllers
                 GameId = game.Id
             }));
 
-            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             try
             {
                 if (existingTransactions.Count > 0)
@@ -599,10 +688,7 @@ namespace NineToShineApi.Controllers
             catch (DbUpdateConcurrencyException)
             {
                 await transaction.RollbackAsync(ct);
-                return Conflict(new
-                {
-                    error = "One or more finance rows changed while the replacement was being saved. Reload and try again."
-                });
+                return FinanceConflict();
             }
 
             return Ok(await GetFinanceDtos(created.Select(finance => finance.Id).ToList(), ct));
@@ -611,11 +697,20 @@ namespace NineToShineApi.Controllers
         // DELETE: api/finance/trip/by-date?date=2023-01-01
         // Löscht alle TRIP-Transaktionen eines bestimmten Tages
         [HttpDelete("trip/by-date")]
-        public async Task<IActionResult> DeleteTripsByDate([FromQuery] DateTime date, CancellationToken ct)
+        public async Task<IActionResult> DeleteTripsByDate(
+            [FromQuery] DateTime date,
+            [FromBody] FinanceVersionReferencesRequest body,
+            CancellationToken ct)
         {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            var duplicateError = ValidateVersionReferences(body.Transactions);
+            if (duplicateError is not null) return duplicateError;
+
             var start = date.Date;
             var end = start.AddDays(1);
 
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             var transactions = await _db.Finance
                 .Where(f => f.Category == "TRIP" && f.OccurredAt >= start && f.OccurredAt < end)
                 .ToListAsync(ct);
@@ -625,8 +720,19 @@ namespace NineToShineApi.Controllers
                 return NotFound();
             }
 
-            _db.Finance.RemoveRange(transactions);
-            await _db.SaveChangesAsync(ct);
+            if (!VersionsMatch(transactions, body.Transactions)) return FinanceConflict();
+
+            try
+            {
+                _db.Finance.RemoveRange(transactions);
+                await _db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync(ct);
+                return FinanceConflict();
+            }
 
             return NoContent();
         }
@@ -659,31 +765,43 @@ namespace NineToShineApi.Controllers
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-            if (body.TransactionIds.Count == 0)
-                return BadRequest(new { error = "transactionIds must contain at least one transaction." });
+            if (body.Transactions.Count == 0)
+                return BadRequest(new { error = "transactions must contain at least one transaction." });
 
             var validationResult = await ValidateTripSplitRequest(body, ct);
             if (validationResult is not null) return validationResult;
 
-            var transactionIds = body.TransactionIds.Distinct().ToList();
-            if (transactionIds.Count != body.TransactionIds.Count)
-                return BadRequest(new { error = "transactionIds must not contain duplicates." });
+            var duplicateError = ValidateVersionReferences(body.Transactions);
+            if (duplicateError is not null) return duplicateError;
 
+            var transactionIds = body.Transactions
+                .Select(reference => reference.Id)
+                .ToList();
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             var existingTransactions = await _db.Finance
                 .Where(f => transactionIds.Contains(f.Id))
                 .ToListAsync(ct);
 
-            if (existingTransactions.Count != transactionIds.Count)
-                return BadRequest(new { error = "All transactionIds must refer to existing finance rows." });
+            if (!VersionsMatch(existingTransactions, body.Transactions))
+                return FinanceConflict();
 
             if (existingTransactions.Any(f => f.Category != "TRIP"))
                 return BadRequest(new { error = "Only TRIP transactions can be replaced by this endpoint." });
 
-            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
-            _db.Finance.RemoveRange(existingTransactions);
             var created = CreateTripSplitRows(body);
-            await _db.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
+            try
+            {
+                _db.Finance.RemoveRange(existingTransactions);
+                await _db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync(ct);
+                return FinanceConflict();
+            }
+
             var createdDtos = await GetFinanceDtos(created.Select(f => f.Id).ToList(), ct);
 
             return Ok(createdDtos);
@@ -775,10 +893,49 @@ namespace NineToShineApi.Controllers
                     f.User != null ? f.User.DisplayName : null,
                     f.SeasonId,
                     f.GameId,
-                    f.Game != null ? f.Game.GameName : null
+                    f.Game != null ? f.Game.GameName : null,
+                    f.UpdatedAt
                 ))
                 .ToListAsync(ct);
         }
+
+        private BadRequestObjectResult? ValidateVersionReferences(
+            IReadOnlyCollection<FinanceVersionReference> references)
+        {
+            if (references.Any(reference => !reference.UpdatedAt.HasValue))
+                return BadRequest(new { error = "Every transaction must include updatedAt." });
+
+            if (references.Select(reference => reference.Id).Distinct().Count() != references.Count)
+                return BadRequest(new { error = "Transactions must not contain duplicate ids." });
+
+            return null;
+        }
+
+        private static bool VersionsMatch(
+            IReadOnlyCollection<Finance> rows,
+            IReadOnlyCollection<FinanceVersionReference> references)
+        {
+            if (rows.Count != references.Count) return false;
+
+            var expectedVersions = references.ToDictionary(
+                reference => reference.Id,
+                reference => reference.UpdatedAt!.Value.UtcDateTime);
+
+            return rows.All(row =>
+                expectedVersions.TryGetValue(row.Id, out var expected) &&
+                row.UpdatedAt == expected);
+        }
+
+        private static bool MatchesExpectedVersion(
+            Finance row,
+            DateTimeOffset expectedVersion) =>
+            row.UpdatedAt == expectedVersion.UtcDateTime;
+
+        private ConflictObjectResult FinanceConflict() =>
+            Conflict(new
+            {
+                error = "Finance data changed after it was loaded. Reload and try again."
+            });
 
         private static IReadOnlyDictionary<long, decimal> SplitAmountInCents(
             decimal amount,
@@ -819,7 +976,8 @@ namespace NineToShineApi.Controllers
         string? UserDisplayName,
         long? SeasonId,
         long? GameId,
-        string? GameName
+        string? GameName,
+        DateTime UpdatedAt
     );
 
     public record UnpaidDuesMemberDto(
@@ -866,6 +1024,9 @@ namespace NineToShineApi.Controllers
 
     public class UpdateFinanceRequest
     {
+        [Required]
+        public DateTimeOffset? UpdatedAt { get; set; }
+
         public DateTime? OccurredAt { get; set; }
 
         [Required]
@@ -916,13 +1077,13 @@ namespace NineToShineApi.Controllers
     {
         [Required]
         [MinLength(1)]
-        public List<long> TransactionIds { get; set; } = [];
+        public List<FinanceVersionReference> Transactions { get; set; } = [];
     }
 
     public class ReplaceGameDepositsRequest
     {
         [Required]
-        public List<long> TransactionIds { get; set; } = [];
+        public List<FinanceVersionReference> Transactions { get; set; } = [];
 
         [Required]
         public DateTime? OccurredAt { get; set; }
@@ -951,5 +1112,21 @@ namespace NineToShineApi.Controllers
         public decimal Amount { get; set; }
 
         public string? Description { get; set; }
+    }
+
+    public class FinanceVersionReference
+    {
+        [Range(1, long.MaxValue)]
+        public long Id { get; set; }
+
+        [Required]
+        public DateTimeOffset? UpdatedAt { get; set; }
+    }
+
+    public class FinanceVersionReferencesRequest
+    {
+        [Required]
+        [MinLength(1)]
+        public List<FinanceVersionReference> Transactions { get; set; } = [];
     }
 }

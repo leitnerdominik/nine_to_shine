@@ -31,6 +31,7 @@ const finance = (
   overrides: Partial<FinanceDto> = {}
 ): FinanceDto => ({
   id,
+  updatedAt: `2026-07-01T00:00:00.00000${id}Z`,
   occurredAt: '2026-07-01T00:00:00.000Z',
   direction: 'income',
   amount: 1,
@@ -71,7 +72,12 @@ describe('buildDepositEditData', () => {
     ]);
 
     expect(result.blockingError).toBeUndefined();
-    expect(result.transactionIds).toEqual([1, 2, 3, 4]);
+    expect(result.transactions).toEqual([
+      { id: 1, updatedAt: '2026-07-01T00:00:00.000001Z' },
+      { id: 2, updatedAt: '2026-07-01T00:00:00.000002Z' },
+      { id: 3, updatedAt: '2026-07-01T00:00:00.000003Z' },
+      { id: 4, updatedAt: '2026-07-01T00:00:00.000004Z' },
+    ]);
     expect(result.unmatchedDuesCount).toBe(1);
     expect(result.defaultValues.globalDate).toBe('2026-07-01');
     expect(result.defaultValues.seasonId).toBe(3);

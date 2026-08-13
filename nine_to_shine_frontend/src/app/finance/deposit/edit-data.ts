@@ -1,10 +1,15 @@
-import type { FinanceDto, GameDto, UserDto } from '@/definitions/types';
+import type {
+  FinanceDto,
+  FinanceVersionReference,
+  GameDto,
+  UserDto,
+} from '@/definitions/types';
 import type { FormInput } from '@/schema/deposit';
 import { STD_CLUB, STD_MEMBER } from '@/schema/deposit';
 
 export interface DepositEditData {
   defaultValues: FormInput;
-  transactionIds: number[];
+  transactions: FinanceVersionReference[];
   unmatchedDuesCount: number;
   blockingError?: string;
 }
@@ -139,7 +144,10 @@ export function buildDepositEditData(
             }))
           : [{ amount: '', description: '' }],
     },
-    transactionIds: representedTransactions.map((transaction) => transaction.id),
+    transactions: representedTransactions.map(({ id, updatedAt }) => ({
+      id,
+      updatedAt,
+    })),
     unmatchedDuesCount: anonymousDues.length - matchedClubIds.size,
     blockingError,
   };

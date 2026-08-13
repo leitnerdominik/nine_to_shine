@@ -59,6 +59,7 @@ const game = {
 const finances = [
   {
     id: 20,
+    updatedAt: '2026-07-01T09:00:00.000Z',
     occurredAt: '2026-07-01T00:00:00.000Z',
     direction: 'income',
     amount: 30,
@@ -70,6 +71,7 @@ const finances = [
   },
   {
     id: 21,
+    updatedAt: '2026-07-01T09:00:01.000Z',
     occurredAt: '2026-07-01T00:00:00.000Z',
     direction: 'income',
     amount: 20,
@@ -80,6 +82,7 @@ const finances = [
   },
   {
     id: 22,
+    updatedAt: '2026-07-01T09:00:02.000Z',
     occurredAt: '2026-07-01T00:00:00.000Z',
     direction: 'income',
     amount: 5,
@@ -124,7 +127,11 @@ describe('BulkDepositPage edit mode', () => {
 
     await waitFor(() =>
       expect(mocks.replaceGameDeposits).toHaveBeenCalledWith(10, {
-        transactionIds: [20, 21, 22],
+        transactions: [
+          { id: 20, updatedAt: '2026-07-01T09:00:00.000Z' },
+          { id: 21, updatedAt: '2026-07-01T09:00:01.000Z' },
+          { id: 22, updatedAt: '2026-07-01T09:00:02.000Z' },
+        ],
         occurredAt: '2026-07-01T00:00:00.000Z',
         members: [
           {

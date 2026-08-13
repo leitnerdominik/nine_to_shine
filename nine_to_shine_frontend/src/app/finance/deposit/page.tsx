@@ -34,8 +34,10 @@ import type {
   UserDto,
   SeasonDto,
   GameDto,
+  FinanceVersionReference,
   ReplaceGameDepositsRequest,
 } from '@/definitions/types';
+import { isConflictError } from '@/definitions/api';
 
 import {
   schema,
@@ -71,10 +73,14 @@ function BulkDepositForm() {
   const [loading, setLoading] = useState(true);
   const [seasons, setSeasons] = useState<SeasonDto[]>([]);
   const [games, setGames] = useState<GameDto[]>([]);
-  const [editTransactionIds, setEditTransactionIds] = useState<number[]>([]);
+  const [editTransactions, setEditTransactions] = useState<
+    FinanceVersionReference[]
+  >([]);
   const [unmatchedDuesCount, setUnmatchedDuesCount] = useState(0);
   const [blockingError, setBlockingError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [conflictError, setConflictError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -139,9 +145,10 @@ function BulkDepositForm() {
       try {
         setLoading(true);
         setLoadError(null);
-        setEditTransactionIds([]);
+        setEditTransactions([]);
         setUnmatchedDuesCount(0);
         setBlockingError(null);
+        setConflictError(null);
 
         if (isEditMode && editGameId === null) {
           throw new Error('Ungültige Spiel-ID für die Bearbeitung.');
@@ -173,7 +180,7 @@ function BulkDepositForm() {
             selectedGame,
             gameFinances
           );
-          setEditTransactionIds(editData.transactionIds);
+          setEditTransactions(editData.transactions);
           setUnmatchedDuesCount(editData.unmatchedDuesCount);
           setBlockingError(editData.blockingError ?? null);
           reset(editData.defaultValues);
@@ -214,7 +221,7 @@ function BulkDepositForm() {
         setLoading(false);
       }
     })();
-  }, [editGameId, enqueueSnackbar, isEditMode, reset]);
+  }, [editGameId, enqueueSnackbar, isEditMode, reloadKey, reset]);
 
   // --- Handlers ---
   const handleGameChange = (
@@ -238,7 +245,7 @@ function BulkDepositForm() {
   const onSubmit = async (data: FormOutput) => {
     if (isEditMode && editGameId !== null) {
       const body: ReplaceGameDepositsRequest = {
-        transactionIds: editTransactionIds,
+        transactions: editTransactions,
         occurredAt: new Date(data.globalDate).toISOString(),
         members: data.entries
           .filter((entry) => entry.hasPaid)
@@ -257,7 +264,7 @@ function BulkDepositForm() {
       };
 
       if (
-        body.transactionIds.length === 0 &&
+        body.transactions.length === 0 &&
         body.members.length === 0 &&
         body.otherIncomes.length === 0
       ) {
@@ -274,6 +281,13 @@ function BulkDepositForm() {
         });
         router.push(`${routes.financesGames}/${editGameId}`);
       } catch (error) {
+        if (isConflictError(error)) {
+          setConflictError(
+            'Die Finanzdaten wurden inzwischen geändert. Deine Eingaben bleiben erhalten. Lade die aktuellen Daten neu.'
+          );
+          return;
+        }
+
         enqueueSnackbar(
           error instanceof Error
             ? error.message
@@ -466,6 +480,24 @@ function BulkDepositForm() {
         {blockingError && (
           <Alert severity="error" sx={{ mb: 3 }}>
             {blockingError}
+          </Alert>
+        )}
+
+        {conflictError && (
+          <Alert
+            severity="warning"
+            sx={{ mb: 3 }}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => setReloadKey((current) => current + 1)}
+              >
+                Neu laden
+              </Button>
+            }
+          >
+            {conflictError}
           </Alert>
         )}
 

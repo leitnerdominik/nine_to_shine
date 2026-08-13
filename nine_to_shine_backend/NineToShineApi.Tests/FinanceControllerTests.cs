@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using NineToShineApi.Controllers;
 using NineToShineApi.Data;
+using NineToShineApi.Models;
 using NineToShineApi.Tests.Support;
 
 namespace NineToShineApi.Tests;
@@ -59,6 +60,96 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         created.Category.Should().Be("DUES");
         created.UserDisplayName.Should().Be(user.DisplayName);
         created.GameName.Should().Be(game.GameName);
+        created.UpdatedAt.Should().NotBe(default);
+    }
+
+    [Fact]
+    public async Task Update_advances_updated_at_and_rejects_a_stale_version()
+    {
+        var finance = TestFinance("income", 30m, "DUES");
+        await SeedAsync(finance);
+        var originalVersion = finance.UpdatedAt;
+
+        var updatedResponse = await Client.PutAsJsonAsync($"/api/finance/{finance.Id}", new
+        {
+            updatedAt = originalVersion,
+            occurredAt = finance.OccurredAt,
+            direction = "income",
+            amount = 40m,
+            category = "DUES",
+            description = "Aktualisiert"
+        });
+
+        updatedResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var updated = await updatedResponse.Content.ReadFromJsonAsync<FinanceDto>();
+        updated.Should().NotBeNull();
+        updated!.UpdatedAt.Should().BeAfter(originalVersion);
+
+        var staleResponse = await Client.PutAsJsonAsync($"/api/finance/{finance.Id}", new
+        {
+            updatedAt = originalVersion,
+            occurredAt = finance.OccurredAt,
+            direction = "income",
+            amount = 50m,
+            category = "DUES"
+        });
+
+        staleResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var storedAmount = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .Where(row => row.Id == finance.Id)
+            .Select(row => row.Amount)
+            .SingleAsync());
+        storedAmount.Should().Be(40m);
+    }
+
+    [Fact]
+    public async Task Delete_requires_the_current_updated_at()
+    {
+        var finance = TestFinance("income", 30m, "DUES");
+        await SeedAsync(finance);
+
+        var missingVersion = await Client.DeleteAsync($"/api/finance/{finance.Id}");
+        missingVersion.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var staleVersion = Uri.EscapeDataString(finance.UpdatedAt.AddTicks(-10).ToString("O"));
+        var staleDelete = await Client.DeleteAsync(
+            $"/api/finance/{finance.Id}?updatedAt={staleVersion}");
+        staleDelete.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        var currentVersion = Uri.EscapeDataString(finance.UpdatedAt.ToString("O"));
+        var successfulDelete = await Client.DeleteAsync(
+            $"/api/finance/{finance.Id}?updatedAt={currentVersion}");
+        successfulDelete.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Bulk_delete_is_atomic_when_one_version_is_stale()
+    {
+        var first = TestFinance("income", 10m);
+        var second = TestFinance("income", 20m);
+        await SeedAsync(first, second);
+
+        await WithDbContextAsync(async db =>
+        {
+            var row = await db.Finance.SingleAsync(finance => finance.Id == second.Id);
+            row.Amount = 25m;
+            await db.SaveChangesAsync();
+            return row.UpdatedAt;
+        });
+
+        var response = await Client.PostAsJsonAsync("/api/finance/bulk-delete", new
+        {
+            transactions = new[] { Version(first), Version(second) }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var remainingIds = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .OrderBy(finance => finance.Id)
+            .Select(finance => finance.Id)
+            .ToListAsync());
+        remainingIds.Should().Equal(first.Id, second.Id);
     }
 
     [Fact]
@@ -206,7 +297,12 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             $"/api/finance/game/{game.Id}/deposits/replace",
             new
             {
-                transactionIds = new[] { memberDues.Id, clubDues.Id, oldOtherIncome.Id },
+                transactions = new[]
+                {
+                    Version(memberDues),
+                    Version(clubDues),
+                    Version(oldOtherIncome)
+                },
                 occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
                 members = new[]
                 {
@@ -270,7 +366,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             $"/api/finance/game/{game.Id}/deposits/replace",
             new
             {
-                transactionIds = Array.Empty<long>(),
+                transactions = Array.Empty<object>(),
                 occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
                 members = new[]
                 {
@@ -313,7 +409,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             $"/api/finance/game/{game.Id}/deposits/replace",
             new
             {
-                transactionIds = new[] { memberDues.Id, clubDues.Id },
+                transactions = new[] { Version(memberDues), Version(clubDues) },
                 occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
                 members = Array.Empty<object>(),
                 otherIncomes = Array.Empty<object>()
@@ -357,7 +453,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             $"/api/finance/game/{game.Id}/deposits/replace",
             new
             {
-                transactionIds = new[] { memberDues.Id, memberDues.Id },
+                transactions = new[] { Version(memberDues), Version(memberDues) },
                 occurredAt,
                 members = new[] { ValidMember(nina.Id) },
                 otherIncomes = Array.Empty<object>()
@@ -366,7 +462,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             $"/api/finance/game/{game.Id}/deposits/replace",
             new
             {
-                transactionIds = new[] { memberDues.Id },
+                transactions = new[] { Version(memberDues) },
                 occurredAt,
                 members = new[] { ValidMember(nina.Id), ValidMember(nina.Id) },
                 otherIncomes = Array.Empty<object>()
@@ -375,7 +471,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             $"/api/finance/game/{game.Id}/deposits/replace",
             new
             {
-                transactionIds = new[] { memberDues.Id },
+                transactions = new[] { Version(memberDues) },
                 occurredAt,
                 members = new[] { ValidMember(nina.Id, 30.001m) },
                 otherIncomes = Array.Empty<object>()
@@ -384,7 +480,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             $"/api/finance/game/{game.Id}/deposits/replace",
             new
             {
-                transactionIds = new[] { memberDues.Id },
+                transactions = new[] { Version(memberDues) },
                 occurredAt,
                 members = new[] { ValidMember(nina.Id + 999) },
                 otherIncomes = Array.Empty<object>()
@@ -393,7 +489,10 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             $"/api/finance/game/{game.Id}/deposits/replace",
             new
             {
-                transactionIds = new[] { memberDues.Id + 999 },
+                transactions = new[]
+                {
+                    new { id = memberDues.Id + 999, updatedAt = memberDues.UpdatedAt }
+                },
                 occurredAt,
                 members = new[] { ValidMember(nina.Id) },
                 otherIncomes = Array.Empty<object>()
@@ -402,7 +501,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             $"/api/finance/game/{game.Id}/deposits/replace",
             new
             {
-                transactionIds = new[] { otherGameDues.Id },
+                transactions = new[] { Version(otherGameDues) },
                 occurredAt,
                 members = new[] { ValidMember(nina.Id) },
                 otherIncomes = Array.Empty<object>()
@@ -411,7 +510,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             $"/api/finance/game/{game.Id}/deposits/replace",
             new
             {
-                transactionIds = new[] { expense.Id },
+                transactions = new[] { Version(expense) },
                 occurredAt,
                 members = new[] { ValidMember(nina.Id) },
                 otherIncomes = Array.Empty<object>()
@@ -459,7 +558,14 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             game.Id,
             new ReplaceGameDepositsRequest
             {
-                TransactionIds = [memberDues.Id],
+                Transactions =
+                [
+                    new FinanceVersionReference
+                    {
+                        Id = memberDues.Id,
+                        UpdatedAt = memberDues.UpdatedAt
+                    }
+                ],
                 OccurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
                 Members =
                 [
@@ -502,8 +608,19 @@ public sealed class FinanceControllerTests : IntegrationTestBase
                 "PIZZA",
                 new DateTime(2026, 6, 15, 11, 0, 0, DateTimeKind.Utc)));
 
-        var response = await Client.DeleteAsync(
-            "/api/finance/trip/by-date?date=2026-06-15T12%3A30%3A00.000Z");
+        var tripToDelete = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .SingleAsync(x => x.Category == "TRIP" && x.Amount == 10m));
+        using var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            "/api/finance/trip/by-date?date=2026-06-15T12%3A30%3A00.000Z")
+        {
+            Content = JsonContent.Create(new
+            {
+                transactions = new[] { Version(tripToDelete) }
+            })
+        };
+        var response = await Client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
@@ -566,7 +683,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
 
         var response = await Client.PostAsJsonAsync("/api/finance/trip/split/replace", new
         {
-            transactionIds = new[] { oldTripOne.Id, oldTripTwo.Id },
+            transactions = new[] { Version(oldTripOne), Version(oldTripTwo) },
             occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc),
             direction = "expense",
             amount = 10.00m,
@@ -625,7 +742,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
 
         var replaceResponse = await Client.PostAsJsonAsync("/api/finance/trip/split/replace", new
         {
-            transactionIds = new[] { oldTripOne.Id, oldTripTwo.Id },
+            transactions = new[] { Version(oldTripOne), Version(oldTripTwo) },
             direction = "expense",
             amount = 0.01m,
             seasonId = season.Id,
@@ -685,7 +802,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
 
         var nonTripReplace = await Client.PostAsJsonAsync("/api/finance/trip/split/replace", new
         {
-            transactionIds = new[] { nonTrip.Id },
+            transactions = new[] { Version(nonTrip) },
             direction = "expense",
             amount = 10.00m,
             userIds = new[] { nina.Id }
@@ -709,4 +826,10 @@ public sealed class FinanceControllerTests : IntegrationTestBase
                 new DbUpdateConcurrencyException());
         }
     }
+
+    private static FinanceVersionReference Version(Finance finance) => new()
+    {
+        Id = finance.Id,
+        UpdatedAt = finance.UpdatedAt
+    };
 }

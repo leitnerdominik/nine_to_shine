@@ -46,9 +46,9 @@ describe('shared Axios API client', () => {
     });
 
     const { api } = await loadApiModule('https://api.example.test/api');
-    let seenHeaders: unknown;
+    let seenHeaders: AxiosHeaders | undefined;
     api.defaults.adapter = (async (config) => {
-      seenHeaders = config.headers;
+      seenHeaders = AxiosHeaders.from(config.headers);
       return {
         data: { ok: true },
         status: 200,
@@ -62,18 +62,16 @@ describe('shared Axios API client', () => {
     await api.get('/user');
 
     expect(getIdToken).toHaveBeenCalledOnce();
-    expect(new AxiosHeaders(seenHeaders).get('Authorization')).toBe(
-      'Bearer id-token-123'
-    );
+    expect(seenHeaders?.get('Authorization')).toBe('Bearer id-token-123');
   });
 
   it('does not inject Authorization when no Firebase user is signed in', async () => {
     firebaseAuth.getAuth.mockReturnValue({ currentUser: null });
 
     const { api } = await loadApiModule('https://api.example.test/api');
-    let seenHeaders: unknown;
+    let seenHeaders: AxiosHeaders | undefined;
     api.defaults.adapter = (async (config) => {
-      seenHeaders = config.headers;
+      seenHeaders = AxiosHeaders.from(config.headers);
       return {
         data: { ok: true },
         status: 200,
@@ -86,7 +84,7 @@ describe('shared Axios API client', () => {
 
     await api.get('/user');
 
-    expect(new AxiosHeaders(seenHeaders).has('Authorization')).toBe(false);
+    expect(seenHeaders?.has('Authorization')).toBe(false);
   });
 
   it('prefers backend error and detail fields in error messages', async () => {

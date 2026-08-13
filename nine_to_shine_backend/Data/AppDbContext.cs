@@ -202,6 +202,12 @@ namespace NineToShineApi.Data
                 e.Property(x => x.Direction).HasColumnName("direction").IsRequired(); // 'income' | 'expense'
                 e.Property(x => x.Amount).HasColumnName("amount").HasColumnType("numeric(12,2)");
                 e.Property(x => x.Category).HasColumnName("category").IsRequired();
+                e.Property(x => x.UpdatedAt)
+                    .HasColumnName("updated_at")
+                    .HasColumnType("timestamp with time zone")
+                    .HasDefaultValueSql("now()")
+                    .ValueGeneratedOnAddOrUpdate()
+                    .IsConcurrencyToken();
 
                 e.Property(x => x.UserId).HasColumnName("user_id");
                 e.Property(x => x.SeasonId).HasColumnName("season_id");
