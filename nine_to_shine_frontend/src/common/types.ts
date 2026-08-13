@@ -1,27 +1,4 @@
-import { Document } from '@contentful/rich-text-types';
-import { Asset, Entry, EntryFieldTypes, EntrySkeletonType } from 'contentful';
-
-export interface IChronikEntry {
-  id: string;
-  date: string;
-  title: string;
-  body: Document | null;
-  images: IContentImage[] | null;
-}
-
-export interface ContentfulChronikFields {
-  datum: Date;
-  content: EntryFieldTypes.RichText;
-  images: Asset<undefined, string>[];
-  title: string;
-}
-
-export type ChronikSkeleton = EntrySkeletonType<
-  ContentfulChronikFields,
-  'chronik'
->;
-
-export type ContentfulChronikEntry = Entry<ChronikSkeleton, undefined, string>;
+import { Entry, EntrySkeletonType } from 'contentful';
 
 export interface IContentImage {
   src: string;
