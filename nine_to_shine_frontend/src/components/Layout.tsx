@@ -41,7 +41,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   if (user) {
     navigationItems = [
       { text: 'Home', path: routes.home, icon: <HomeIcon /> },
-      { text: 'Chronik', path: routes.chronik, icon: <MenuBookIcon /> },
+      { text: 'Vereinsinfos', path: routes.chronik, icon: <MenuBookIcon /> },
       { text: 'Rangliste', path: routes.rankings, icon: <MilitaryTechIcon /> },
       {
         text: 'Organisieren',

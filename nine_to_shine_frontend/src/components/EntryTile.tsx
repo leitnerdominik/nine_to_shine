@@ -1,5 +1,3 @@
-'use client';
-
 import React from 'react';
 import {
   Card,
@@ -9,8 +7,8 @@ import {
   Typography,
   Box,
 } from '@mui/material';
-import { useRouter } from 'next/navigation';
 import EventNoteIcon from '@mui/icons-material/EventNote';
+import Link from 'next/link';
 
 type EntryTileProps = {
   title: string;
@@ -25,12 +23,6 @@ const EntryTile: React.FC<EntryTileProps> = ({
   date,
   baseRoute,
 }) => {
-  const router = useRouter();
-
-  const navigationToChronik = () => {
-    router.push(`${baseRoute}/${id}`);
-  };
-
   return (
     <Grid2 size={{ xs: 12, sm: 6, md: 4 }}>
       <Card
@@ -48,7 +40,8 @@ const EntryTile: React.FC<EntryTileProps> = ({
         }}
       >
         <CardActionArea
-          onClick={navigationToChronik}
+          component={Link}
+          href={`${baseRoute}/${id}`}
           sx={{
             height: '100%',
             p: 1,

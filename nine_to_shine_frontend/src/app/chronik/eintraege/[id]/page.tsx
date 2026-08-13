@@ -1,9 +1,9 @@
-import ChronikContent from '../ChronikContent';
+import ChronikContent from '../../ChronikContent';
 import {
   chronikEntries,
   formatChronikDate,
   getChronikEntry,
-} from '../chronik-data';
+} from '../../chronik-data';
 import CustomTitle from '@/components/CustomTitle';
 import Layout from '@/components/Layout';
 import { Box, Container, Divider, Typography } from '@mui/material';
