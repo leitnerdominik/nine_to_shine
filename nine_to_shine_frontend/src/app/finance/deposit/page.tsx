@@ -102,7 +102,6 @@ function BulkDepositForm() {
     formState: { errors, isSubmitting },
     reset,
     setValue,
-    getValues,
   } = useForm<FormInput, unknown, FormOutput>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -601,8 +600,6 @@ function BulkDepositForm() {
                 control={control}
                 register={register}
                 errors={errors}
-                setValue={setValue}
-                getValues={getValues}
               />
             ))}
           </Stack>
