@@ -1,12 +1,5 @@
 import { Entry, EntrySkeletonType } from 'contentful';
 
-export interface IContentImage {
-  src: string;
-  alt: string;
-  width: number;
-  height: number;
-}
-
 export interface IRankingEntry {
   id: string;
   title: string;

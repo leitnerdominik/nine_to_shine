@@ -1,25 +1,3 @@
-import { Asset, AssetLink } from 'contentful';
-import { IContentImage } from './types';
-
-export const parseContentfulContentImage = (
-  asset?: Asset<undefined, string> | { sys: AssetLink }
-): IContentImage | null => {
-  if (!asset) {
-    return null;
-  }
-
-  if (!('fields' in asset)) {
-    return null;
-  }
-
-  return {
-    src: asset.fields.file?.url || '',
-    alt: asset.fields.description || '',
-    width: asset.fields.file?.details.image?.width || 0,
-    height: asset.fields.file?.details.image?.height || 0,
-  };
-};
-
 export const capitalizeFirstLetter = (val: string) => {
   return String(val).charAt(0).toUpperCase() + String(val).slice(1);
 };
