@@ -125,10 +125,6 @@ export default function DuesOverviewPage() {
         >
           <Box>
             <CustomTitle text="Offene Spielbeiträge" />
-            <Typography color="text.secondary">
-              Pro Spiel: {STD_MEMBER} € Mitgliedsbeitrag + {STD_CLUB} €
-              Vereinskasse
-            </Typography>
           </Box>
 
           {seasons.length > 0 && (
