@@ -24,6 +24,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Alert,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -35,6 +36,7 @@ import CustomTitle from '@/components/CustomTitle';
 import { apiFinance, apiUsers } from '@/definitions/commands';
 import type { FinanceDto, UserDto } from '@/definitions/types';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { isConflictError } from '@/definitions/api';
 
 // Helper für Währung
 const formatCurrency = (amount: number) =>
@@ -58,6 +60,7 @@ export default function TransactionsPage() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [conflictError, setConflictError] = useState<string | null>(null);
 
   // Daten laden
   const fetchData = useCallback(async () => {
@@ -79,6 +82,10 @@ export default function TransactionsPage() {
 
       const data = await apiFinance.getAll(params);
       setTransactions(data);
+      setSelectedIds((current) =>
+        current.filter((id) => data.some((transaction) => transaction.id === id))
+      );
+      setConflictError(null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -137,9 +144,12 @@ export default function TransactionsPage() {
 
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
+    setDeleteDialogOpen(false);
     try {
-      // Alle ausgewählten IDs löschen
-      await Promise.all(selectedIds.map((id) => apiFinance.remove(id)));
+      const selectedTransactions = transactions
+        .filter((transaction) => selectedIds.includes(transaction.id))
+        .map(({ id, updatedAt }) => ({ id, updatedAt }));
+      await apiFinance.bulkDelete({ transactions: selectedTransactions });
       // Daten neu laden
       await fetchData();
       // Auswahl zurücksetzen
@@ -147,6 +157,11 @@ export default function TransactionsPage() {
       setDeleteDialogOpen(false);
     } catch (err) {
       console.error('Fehler beim Löschen:', err);
+      if (isConflictError(err)) {
+        setConflictError(
+          'Mindestens eine Buchung wurde inzwischen geändert. Deine Auswahl bleibt erhalten. Lade die aktuellen Daten neu.'
+        );
+      }
     } finally {
       setIsDeleting(false);
     }
@@ -156,6 +171,24 @@ export default function TransactionsPage() {
     <Layout>
       <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
         <CustomTitle text="Alle Buchungen" />
+
+        {conflictError && (
+          <Alert
+            severity="warning"
+            sx={{ mb: 3 }}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => void fetchData()}
+              >
+                Neu laden
+              </Button>
+            }
+          >
+            {conflictError}
+          </Alert>
+        )}
 
         {/* --- FILTER BAR --- */}
         <Paper

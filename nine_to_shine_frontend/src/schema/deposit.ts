@@ -3,24 +3,53 @@ import { z } from 'zod';
 export const STD_MEMBER = '30';
 export const STD_CLUB = '20';
 
+const isMoneyAmount = (value: string, allowZero: boolean) => {
+  const amount = Number(value);
+  return (
+    Number.isFinite(amount) &&
+    (allowZero ? amount >= 0 : amount > 0) &&
+    Math.abs(Math.round(amount * 100) - amount * 100) < 1e-8
+  );
+};
+
 // 1. Schema für Mitgliedsbeiträge
-export const entrySchema = z.object({
-  userId: z.number(),
-  displayName: z.string(),
-  useStandard: z.boolean(),
-  hasPaid: z.boolean(),
-  description: z.string().optional(),
-  memberAmount: z.string().refine((val) => !Number.isNaN(parseFloat(val)), {
-    message: 'Muss eine Zahl sein',
-  }),
-  clubAmount: z.string().refine((val) => !Number.isNaN(parseFloat(val)), {
-    message: 'Muss eine Zahl sein',
-  }),
-});
+export const entrySchema = z
+  .object({
+    userId: z.number(),
+    displayName: z.string(),
+    useStandard: z.boolean(),
+    hasPaid: z.boolean(),
+    description: z.string().optional(),
+    memberAmount: z.string().refine((val) => isMoneyAmount(val, true), {
+      message: 'Muss ein nichtnegativer Betrag mit maximal zwei Nachkommastellen sein',
+    }),
+    clubAmount: z.string().refine((val) => isMoneyAmount(val, true), {
+      message: 'Muss ein nichtnegativer Betrag mit maximal zwei Nachkommastellen sein',
+    }),
+  })
+  .superRefine((entry, ctx) => {
+    if (
+      entry.hasPaid &&
+      isMoneyAmount(entry.memberAmount, true) &&
+      isMoneyAmount(entry.clubAmount, true) &&
+      Number(entry.memberAmount) + Number(entry.clubAmount) === 0
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['memberAmount'],
+        message: 'Mindestens ein Betrag muss größer als 0 sein',
+      });
+    }
+  });
 
 // 2. Schema für Sonstige Einnahmen
 export const otherIncomeItemSchema = z.object({
-  amount: z.string().optional(),
+  amount: z
+    .string()
+    .optional()
+    .refine((val) => !val || isMoneyAmount(val, false), {
+      message: 'Muss ein positiver Betrag mit maximal zwei Nachkommastellen sein',
+    }),
   description: z.string().optional(),
 });
 

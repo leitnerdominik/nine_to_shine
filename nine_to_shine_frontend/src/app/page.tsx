@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
+import SavingsIcon from '@mui/icons-material/Savings';
 import Link from 'next/link';
 import dayjs from 'dayjs';
 import 'dayjs/locale/de';
@@ -24,10 +25,16 @@ import {
   apiRanking,
   apiOrganizerDuty,
   apiSeason,
+  apiFinance,
 } from '@/definitions/commands';
-import type { TopRankedDto, OrganizerDutyDto } from '@/definitions/types';
+import type {
+  GameDuesStatusDto,
+  TopRankedDto,
+  OrganizerDutyDto,
+} from '@/definitions/types';
 import { useSnackbar } from 'notistack';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { routes } from '@/common/routes';
 
 dayjs.locale('de');
 
@@ -40,6 +47,10 @@ export default function DashboardPage() {
   const [currentSeasonNumber, setCurrentSeasonNumber] = useState<number | null>(
     null
   );
+  const [openDuesCount, setOpenDuesCount] = useState<number | null>(null);
+  const [openDuesGameCount, setOpenDuesGameCount] = useState<number | null>(
+    null
+  );
 
   const { enqueueSnackbar } = useSnackbar();
 
@@ -47,18 +58,30 @@ export default function DashboardPage() {
     (async () => {
       try {
         const seasons = await apiSeason.getAll();
-        const currentSeason = seasons.sort(
+        const currentSeason = [...seasons].sort(
           (a, b) => b.seasonNumber - a.seasonNumber
         )[0];
         setCurrentSeasonNumber(currentSeason?.seasonNumber || null);
 
-        const [topData, dutyData] = await Promise.all([
+        const [topData, dutyData, duesData] = await Promise.all([
           apiRanking.getTopRanked(currentSeason?.id),
           apiOrganizerDuty.getNextDuty(),
+          currentSeason
+            ? apiFinance.getDuesStatus(currentSeason.id)
+            : Promise.resolve([] as GameDuesStatusDto[]),
         ]);
 
         setTopPlayer(topData);
         setNextDuty(dutyData);
+        setOpenDuesCount(
+          duesData.reduce(
+            (total, game) => total + game.unpaidMembers.length,
+            0
+          )
+        );
+        setOpenDuesGameCount(
+          duesData.filter((game) => game.unpaidMembers.length > 0).length
+        );
       } catch {
         enqueueSnackbar('Fehler beim Laden des Dashboards', {
               variant: 'error',
@@ -76,6 +99,8 @@ export default function DashboardPage() {
       </Layout>
     );
   }
+
+  const hasOpenDues = openDuesCount !== null && openDuesCount > 0;
 
   return (
     <Layout>
@@ -215,6 +240,86 @@ export default function DashboardPage() {
                           </Typography>
                         </>
                       )}
+                    </Box>
+                  </Stack>
+                </CardContent>
+              </CardActionArea>
+            </Card>
+          </Grid2>
+
+          <Grid2 size={{ xs: 12 }}>
+            <Card
+              elevation={3}
+              sx={{
+                height: '100%',
+                bgcolor: '#fff',
+                borderLeft: `6px solid ${
+                  openDuesCount === null
+                    ? theme.palette.grey[400]
+                    : hasOpenDues
+                    ? theme.palette.warning.main
+                    : theme.palette.success.main
+                }`,
+              }}
+            >
+              <CardActionArea
+                component={Link}
+                href={routes.duesOverview}
+                sx={{ height: '100%' }}
+              >
+                <CardContent sx={{ p: 3 }}>
+                  <Stack direction="row" spacing={2} alignItems="center">
+                    <Avatar
+                      sx={{
+                        bgcolor:
+                          openDuesCount === null
+                            ? theme.palette.grey[300]
+                            : hasOpenDues
+                            ? theme.palette.warning.light
+                            : theme.palette.success.light,
+                        width: 56,
+                        height: 56,
+                      }}
+                    >
+                      <SavingsIcon
+                        sx={{
+                          color:
+                            openDuesCount === null
+                              ? theme.palette.grey[700]
+                              : hasOpenDues
+                              ? theme.palette.warning.dark
+                              : theme.palette.success.dark,
+                        }}
+                      />
+                    </Avatar>
+
+                    <Box>
+                      <Typography
+                        variant="overline"
+                        color="text.secondary"
+                        fontWeight="bold"
+                      >
+                        OFFENE SPIELBEITRÄGE{' '}
+                        {currentSeasonNumber
+                          ? `(SAISON ${currentSeasonNumber})`
+                          : ''}
+                      </Typography>
+                      <Typography variant="h4" fontWeight="bold">
+                        {openDuesCount === null
+                          ? 'Nicht verfügbar'
+                          : hasOpenDues
+                          ? `${openDuesCount} offen`
+                          : 'Alles bezahlt'}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {openDuesCount === null
+                          ? 'Status konnte nicht geladen werden'
+                          : hasOpenDues
+                          ? `${openDuesGameCount} ${
+                              openDuesGameCount === 1 ? 'Spiel' : 'Spiele'
+                            } betroffen`
+                          : 'Keine offenen Spielbeiträge'}
+                      </Typography>
                     </Box>
                   </Stack>
                 </CardContent>

@@ -20,7 +20,7 @@ import { AuthError, signOut } from 'firebase/auth';
 import { getFirebaseAuth } from '../../firebase';
 import { enqueueSnackbar } from 'notistack';
 import HomeIcon from '@mui/icons-material/Home';
-import MenuBookIcon from '@mui/icons-material/MenuBook';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import EuroIcon from '@mui/icons-material/Euro';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import MilitaryTechIcon from '@mui/icons-material/MilitaryTech';
@@ -41,7 +41,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   if (user) {
     navigationItems = [
       { text: 'Home', path: routes.home, icon: <HomeIcon /> },
-      { text: 'Chronik', path: routes.chronik, icon: <MenuBookIcon /> },
+      { text: 'Informationen', path: routes.info, icon: <InfoOutlinedIcon /> },
       { text: 'Rangliste', path: routes.rankings, icon: <MilitaryTechIcon /> },
       {
         text: 'Organisieren',

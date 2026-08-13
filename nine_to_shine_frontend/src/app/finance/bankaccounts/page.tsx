@@ -13,6 +13,7 @@ import {
 import Grid2 from '@mui/material/Grid2';
 import Link from 'next/link';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
 import SavingsIcon from '@mui/icons-material/Savings';
 import Layout from '@/components/Layout';
 import CustomTitle from '@/components/CustomTitle';
@@ -27,7 +28,7 @@ interface AccountData {
   title: string;
   balance: number;
   clubOnlyBalance?: number;
-  variant: 'total' | 'club' | 'user';
+  variant: 'total' | 'travel' | 'club' | 'user';
   user?: UserDto;
 }
 
@@ -39,12 +40,14 @@ export default function BankAccountsPage() {
   useEffect(() => {
     (async () => {
       try {
-        // 1. Initialdaten laden (User + Gesamtstand + Vereinsstand)
-        const [users, globalBalance, clubBalance] = await Promise.all([
-          apiUsers.getAll(),
-          apiFinance.getGlobalBalance(),
-          apiFinance.getClubBalance(),
-        ]);
+        // 1. Initialdaten laden (User + Gesamtstand + Reise-/Vereinsstand)
+        const [users, globalBalance, membersBalance, clubBalance] =
+          await Promise.all([
+            apiUsers.getAll(),
+            apiFinance.getGlobalBalance(),
+            apiFinance.getMembersBalance(),
+            apiFinance.getClubBalance(),
+          ]);
 
         // 2. Kontostände für alle User parallel abfragen
         const userBalancePromises = users.map((u) =>
@@ -70,6 +73,13 @@ export default function BankAccountsPage() {
           variant: 'club',
         };
 
+        const travelAccount: AccountData = {
+          id: 'reise-kasse',
+          title: 'Reise Kasse',
+          balance: membersBalance,
+          variant: 'travel',
+        };
+
         const userAccounts: AccountData[] = userBalances.map(
           ({ user, balance }) => ({
             id: user.id.toString(),
@@ -80,8 +90,12 @@ export default function BankAccountsPage() {
           })
         );
 
-        // Vereinskasse zuerst, dann Mitglieder
-        setAccounts([totalAccount, clubAccount, ...userAccounts]);
+        setAccounts([
+          totalAccount,
+          travelAccount,
+          clubAccount,
+          ...userAccounts,
+        ]);
       } catch (err) {
         console.error('Fehler beim Laden der Konten:', err);
       } finally {
@@ -114,6 +128,11 @@ export default function BankAccountsPage() {
               avatarBg = theme.palette.grey[700];
               IconComponent = AccountBalanceIcon;
               subTitle = 'Physischer Kontostand';
+              linkHref = '/finance/transactions';
+            } else if (acc.variant === 'travel') {
+              avatarBg = theme.palette.info.main;
+              IconComponent = FlightTakeoffIcon;
+              subTitle = 'Guthaben aller Mitglieder';
               linkHref = '/finance/transactions';
             } else if (acc.variant === 'club') {
               avatarBg = theme.palette.primary.main;

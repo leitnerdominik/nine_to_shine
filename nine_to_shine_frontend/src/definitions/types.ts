@@ -98,6 +98,7 @@ export interface GenerateOrganizerDutiesResponse {
 
 export interface FinanceDto {
   id: number;
+  updatedAt: string;
   occurredAt: string;
   direction: 'income' | 'expense';
   amount: number;
@@ -108,6 +109,21 @@ export interface FinanceDto {
   seasonId?: number;
   gameId?: number;
   gameName?: string;
+}
+
+export interface UnpaidDuesMemberDto {
+  userId: number;
+  displayName: string;
+}
+
+export interface GameDuesStatusDto {
+  gameId: number;
+  seasonId: number;
+  playedAt: string;
+  gameName: string;
+  activeMemberCount: number;
+  paidMemberCount: number;
+  unpaidMembers: UnpaidDuesMemberDto[];
 }
 
 export interface CreateFinanceRequest {
@@ -121,7 +137,37 @@ export interface CreateFinanceRequest {
   gameId?: number;
 }
 
-export type UpdateFinanceRequest = CreateFinanceRequest;
+export interface UpdateFinanceRequest extends CreateFinanceRequest {
+  updatedAt: string;
+}
+
+export interface FinanceVersionReference {
+  id: number;
+  updatedAt: string;
+}
+
+export interface FinanceVersionReferencesRequest {
+  transactions: FinanceVersionReference[];
+}
+
+export interface GameDepositMemberRequest {
+  userId: number;
+  memberAmount: number;
+  clubAmount: number;
+  description?: string;
+}
+
+export interface GameDepositOtherIncomeRequest {
+  amount: number;
+  description?: string;
+}
+
+export interface ReplaceGameDepositsRequest {
+  transactions: FinanceVersionReference[];
+  occurredAt: string;
+  members: GameDepositMemberRequest[];
+  otherIncomes: GameDepositOtherIncomeRequest[];
+}
 
 export interface CreateTripSplitRequest {
   occurredAt?: string;
@@ -133,7 +179,7 @@ export interface CreateTripSplitRequest {
 }
 
 export interface ReplaceTripSplitRequest extends CreateTripSplitRequest {
-  transactionIds: number[];
+  transactions: FinanceVersionReference[];
 }
 
 export interface TopRankedDto {

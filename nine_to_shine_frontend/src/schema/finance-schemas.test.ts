@@ -59,6 +59,41 @@ describe('finance form schemas', () => {
         otherIncomes: [],
       }).success
     ).toBe(false);
+
+    expect(
+      depositSchema.safeParse({
+        globalDate: '2026-06-15',
+        seasonId: 3,
+        entries: [],
+        otherIncomes: [{ amount: '-1', description: 'Invalid' }],
+      }).success
+    ).toBe(false);
+  });
+
+  it('requires a checked member to have at least one positive amount', () => {
+    const form = {
+      globalDate: '2026-06-15',
+      seasonId: 3,
+      entries: [
+        {
+          userId: 7,
+          displayName: 'Alex',
+          useStandard: true,
+          hasPaid: true,
+          memberAmount: '0',
+          clubAmount: '0',
+        },
+      ],
+      otherIncomes: [],
+    };
+
+    expect(depositSchema.safeParse(form).success).toBe(false);
+    expect(
+      depositSchema.safeParse({
+        ...form,
+        entries: [{ ...form.entries[0], memberAmount: '', clubAmount: '20' }],
+      }).success
+    ).toBe(true);
   });
 
   it('validates trip dates, seasons, base costs, and participants', () => {

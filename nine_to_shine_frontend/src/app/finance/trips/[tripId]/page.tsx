@@ -25,6 +25,7 @@ import {
   TableRow,
   TextField,
   Typography,
+  Alert,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -43,7 +44,8 @@ import CustomTitle from '@/components/CustomTitle';
 import Layout from '@/components/Layout';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import { apiFinance, apiUsers } from '@/definitions/commands';
-import type { UserDto } from '@/definitions/types';
+import type { FinanceVersionReference, UserDto } from '@/definitions/types';
+import { isConflictError } from '@/definitions/api';
 
 interface TripParticipant {
   user: UserDto;
@@ -61,7 +63,8 @@ interface TripDetails {
   balance: number;
   baseTotal: number;
   baseDescription: string;
-  baseTransactionIds: number[];
+  transactions: FinanceVersionReference[];
+  baseTransactions: FinanceVersionReference[];
   tripShare: number;
   additionalShare: number;
   seasonId?: number;
@@ -69,7 +72,11 @@ interface TripDetails {
   additionalBookings: {
     id: string;
     transactionIds: number[];
-    transactionEntries: { id: number; userId?: number | null }[];
+    transactionEntries: {
+      id: number;
+      updatedAt: string;
+      userId?: number | null;
+    }[];
     direction: 'income' | 'expense';
     amount: number;
     participantCount: number;
@@ -115,6 +122,7 @@ export default function TripDetailsPage({
   >([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [conflictError, setConflictError] = useState<string | null>(null);
 
   const fetchTripDetails = useCallback(async () => {
     try {
@@ -203,7 +211,11 @@ export default function TripDetailsPage({
         {
           id: string;
           transactionIds: number[];
-          transactionEntries: { id: number; userId?: number | null }[];
+          transactionEntries: {
+            id: number;
+            updatedAt: string;
+            userId?: number | null;
+          }[];
           direction: 'income' | 'expense';
           amount: number;
           participantIds: Set<number>;
@@ -219,7 +231,11 @@ export default function TripDetailsPage({
         if (existing) {
           existing.amount += tx.amount;
           existing.transactionIds.push(tx.id);
-          existing.transactionEntries.push({ id: tx.id, userId: tx.userId });
+          existing.transactionEntries.push({
+            id: tx.id,
+            updatedAt: tx.updatedAt,
+            userId: tx.userId,
+          });
           if (tx.userId) existing.participantIds.add(tx.userId);
           if (!tx.userId) existing.hasGlobalBooking = true;
           return;
@@ -228,7 +244,9 @@ export default function TripDetailsPage({
         groupedAdditionalBookings.set(key, {
           id: key,
           transactionIds: [tx.id],
-          transactionEntries: [{ id: tx.id, userId: tx.userId }],
+          transactionEntries: [
+            { id: tx.id, updatedAt: tx.updatedAt, userId: tx.userId },
+          ],
           direction: tx.direction,
           amount: tx.amount,
           participantIds: tx.userId ? new Set([tx.userId]) : new Set(),
@@ -263,7 +281,14 @@ export default function TripDetailsPage({
         balance,
         baseTotal,
         baseDescription: `${getCleanTripDescription(firstTx.description)} (Anreise/Unterkunft)`,
-        baseTransactionIds: baseTripTransactions.map((tx) => tx.id),
+        transactions: tripTransactions.map(({ id, updatedAt }) => ({
+          id,
+          updatedAt,
+        })),
+        baseTransactions: baseTripTransactions.map(({ id, updatedAt }) => ({
+          id,
+          updatedAt,
+        })),
         tripShare,
         additionalShare,
         seasonId: firstTx.seasonId,
@@ -286,6 +311,27 @@ export default function TripDetailsPage({
   useEffect(() => {
     void fetchTripDetails();
   }, [fetchTripDetails]);
+
+  const handleMutationError = (error: unknown, fallbackMessage: string) => {
+    console.error(error);
+    if (isConflictError(error)) {
+      setConflictError(
+        'Die Finanzdaten wurden inzwischen geändert. Deine Eingaben bleiben erhalten. Lade die aktuellen Daten neu.'
+      );
+      return;
+    }
+
+    enqueueSnackbar(fallbackMessage, { variant: 'error' });
+  };
+
+  const handleReloadAfterConflict = async () => {
+    setConflictError(null);
+    await fetchTripDetails();
+    setEditingBookingId(null);
+    setIsEditingTripSetup(false);
+    setEditAmount('');
+    setEditDescription('');
+  };
 
   const handleAddBooking = async () => {
     if (!trip) return;
@@ -361,14 +407,14 @@ export default function TripDetailsPage({
 
     if (targetUserIds.length === 0) return;
 
-    const transactionIds = booking.transactionEntries.map(
-      (transaction) => transaction.id
+    const transactions = booking.transactionEntries.map(
+      ({ id, updatedAt }) => ({ id, updatedAt })
     );
 
     try {
       setIsSaving(true);
       await apiFinance.replaceTripSplit({
-        transactionIds,
+        transactions,
         occurredAt: decodedTripId,
         direction: editDirection,
         amount: parsedAmount,
@@ -380,7 +426,7 @@ export default function TripDetailsPage({
       handleCancelEditBooking();
       await fetchTripDetails();
     } catch (err) {
-      console.error(err);
+      handleMutationError(err, 'Fehler beim Aktualisieren der Buchung.');
     } finally {
       setIsSaving(false);
     }
@@ -440,10 +486,10 @@ export default function TripDetailsPage({
     );
     const requests: Promise<unknown>[] = [];
 
-    if (trip.baseTransactionIds.length > 0) {
+    if (trip.baseTransactions.length > 0) {
       requests.push(
         apiFinance.replaceTripSplit({
-          transactionIds: trip.baseTransactionIds,
+          transactions: trip.baseTransactions,
           occurredAt: decodedTripId,
           direction: 'expense',
           amount: parsedBaseAmount,
@@ -466,14 +512,14 @@ export default function TripDetailsPage({
     }
 
     trip.additionalBookings.forEach((booking) => {
-      const transactionIds = booking.transactionEntries.map(
-        (transaction) => transaction.id
+      const transactions = booking.transactionEntries.map(
+        ({ id, updatedAt }) => ({ id, updatedAt })
       );
-      if (transactionIds.length === 0) return;
+      if (transactions.length === 0) return;
 
       requests.push(
         apiFinance.replaceTripSplit({
-          transactionIds,
+          transactions,
           occurredAt: decodedTripId,
           direction: booking.direction,
           amount: booking.amount,
@@ -490,7 +536,7 @@ export default function TripDetailsPage({
       setIsEditingTripSetup(false);
       await fetchTripDetails();
     } catch (err) {
-      console.error(err);
+      handleMutationError(err, 'Fehler beim Aktualisieren des Trips.');
     } finally {
       setIsSaving(false);
     }
@@ -501,12 +547,11 @@ export default function TripDetailsPage({
 
     try {
       setIsDeleting(true);
-      await apiFinance.deleteTripsByDate(trip.date);
+      await apiFinance.deleteTripsByDate(trip.date, trip.transactions);
       enqueueSnackbar('Trip erfolgreich gelöscht.', { variant: 'success' });
       router.push('/finance/trips');
     } catch (err) {
-      console.error(err);
-      enqueueSnackbar('Fehler beim Löschen des Trips.', { variant: 'error' });
+      handleMutationError(err, 'Fehler beim Löschen des Trips.');
     } finally {
       setIsDeleting(false);
       setDeleteDialogOpen(false);
@@ -579,6 +624,24 @@ export default function TripDetailsPage({
             </Box>
           </Button>
         </Stack>
+
+        {conflictError && (
+          <Alert
+            severity="warning"
+            sx={{ mb: 3 }}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => void handleReloadAfterConflict()}
+              >
+                Neu laden
+              </Button>
+            }
+          >
+            {conflictError}
+          </Alert>
+        )}
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
           <Paper variant="outlined" sx={{ p: 2, flex: 1 }}>

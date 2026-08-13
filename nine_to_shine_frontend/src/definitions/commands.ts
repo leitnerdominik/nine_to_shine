@@ -1,4 +1,4 @@
-import { api, toErrorMessage } from './api';
+import { api, toApiRequestError, toErrorMessage } from './api';
 import {
   CreateGameRequest,
   CreateRankingRequest,
@@ -12,9 +12,13 @@ import {
   CreateOrganizerDutyRequest,
   OrganizerRotationMemberDto,
   CreateFinanceRequest,
+  FinanceVersionReference,
+  FinanceVersionReferencesRequest,
+  GameDuesStatusDto,
   FinanceDto,
   CreateTripSplitRequest,
   ReplaceTripSplitRequest,
+  ReplaceGameDepositsRequest,
   UpdateFinanceRequest,
   TopRankedDto,
   UpdateOrganizerRotationRequest,
@@ -109,7 +113,7 @@ export const apiGame = {
       const { data } = await api.get<GameDto[]>('/game', { params });
       return data;
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
     }
   },
 
@@ -118,7 +122,7 @@ export const apiGame = {
       const { data } = await api.get<GameDto>(`/game/${id}`);
       return data;
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
     }
   },
 
@@ -127,7 +131,7 @@ export const apiGame = {
       const { data } = await api.post<GameDto>('/game', body);
       return data;
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
     }
   },
 
@@ -135,7 +139,7 @@ export const apiGame = {
     try {
       await api.delete(`/game/${id}`);
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
     }
   },
   async update(
@@ -167,7 +171,7 @@ export const apiRanking = {
       const { data } = await api.get<RankingDto[]>('/ranking', { params });
       return data;
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
     }
   },
 
@@ -176,7 +180,7 @@ export const apiRanking = {
       const { data } = await api.get<RankingDto>(`/ranking/${id}`);
       return data;
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
     }
   },
 
@@ -185,7 +189,7 @@ export const apiRanking = {
       const { data } = await api.post<RankingDto>('/ranking', body);
       return data;
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
     }
   },
 
@@ -297,6 +301,18 @@ export const apiFinance = {
     }
   },
 
+  async getDuesStatus(seasonId?: number): Promise<GameDuesStatusDto[]> {
+    try {
+      const { data } = await api.get<GameDuesStatusDto[]>(
+        '/finance/dues-status',
+        { params: seasonId === undefined ? undefined : { seasonId } }
+      );
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
   async getById(id: number): Promise<FinanceDto> {
     try {
       const { data } = await api.get<FinanceDto>(`/finance/${id}`);
@@ -320,7 +336,22 @@ export const apiFinance = {
       const { data } = await api.put<FinanceDto>(`/finance/${id}`, body);
       return data;
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
+    }
+  },
+
+  async replaceGameDeposits(
+    gameId: number,
+    body: ReplaceGameDepositsRequest
+  ): Promise<FinanceDto[]> {
+    try {
+      const { data } = await api.put<FinanceDto[]>(
+        `/finance/game/${gameId}/deposits/replace`,
+        body
+      );
+      return data;
+    } catch (e) {
+      throw toApiRequestError(e);
     }
   },
 
@@ -341,15 +372,23 @@ export const apiFinance = {
       );
       return data;
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
     }
   },
 
-  async remove(id: number): Promise<void> {
+  async remove(id: number, updatedAt: string): Promise<void> {
     try {
-      await api.delete(`/finance/${id}`);
+      await api.delete(`/finance/${id}`, { params: { updatedAt } });
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
+    }
+  },
+
+  async bulkDelete(body: FinanceVersionReferencesRequest): Promise<void> {
+    try {
+      await api.post('/finance/bulk-delete', body);
+    } catch (e) {
+      throw toApiRequestError(e);
     }
   },
 
@@ -376,19 +415,34 @@ export const apiFinance = {
     return data;
   },
 
-  async deleteByGameId(gameId: number): Promise<void> {
+  async getMembersBalance(): Promise<number> {
+    const { data } = await api.get<number>('/finance/balance/members');
+    return data;
+  },
+
+  async deleteByGameId(
+    gameId: number,
+    transactions: FinanceVersionReference[]
+  ): Promise<void> {
     try {
-      await api.delete(`/finance/by-game/${gameId}`);
+      await api.delete(`/finance/by-game/${gameId}`, {
+        data: { transactions },
+      });
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
     }
   },
 
-  async deleteTripsByDate(date: Date): Promise<void> {
+  async deleteTripsByDate(
+    date: Date,
+    transactions: FinanceVersionReference[]
+  ): Promise<void> {
     try {
-      await api.delete(`/finance/trip/by-date?date=${date.toISOString()}`);
+      await api.delete(`/finance/trip/by-date?date=${date.toISOString()}`, {
+        data: { transactions },
+      });
     } catch (e) {
-      throw new Error(toErrorMessage(e));
+      throw toApiRequestError(e);
     }
   },
 };
