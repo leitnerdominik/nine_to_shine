@@ -9,21 +9,21 @@ vi.mock('@/components/Layout', () => ({
     React.createElement(React.Fragment, null, children),
 }));
 
-describe('Vereinsinfos page', () => {
+describe('Informationen page', () => {
   it('links to all three information areas in the intended order', () => {
     renderWithProviders(<ChronikPage />);
 
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Vereinsinfos' })
+      screen.getByRole('heading', { level: 1, name: 'Informationen' })
     ).toBeInTheDocument();
 
     const links = screen.getAllByRole('link');
     expect(links).toHaveLength(3);
     expect(links[0]).toHaveAccessibleName(/Strafenkatalog/);
-    expect(links[0]).toHaveAttribute('href', '/chronik/strafenkatalog');
+    expect(links[0]).toHaveAttribute('href', '/info/strafenkatalog');
     expect(links[1]).toHaveAccessibleName(/Chronik/);
-    expect(links[1]).toHaveAttribute('href', '/chronik/eintraege');
+    expect(links[1]).toHaveAttribute('href', '/info/eintraege');
     expect(links[2]).toHaveAccessibleName(/Verfassung/);
-    expect(links[2]).toHaveAttribute('href', '/chronik/verfassung');
+    expect(links[2]).toHaveAttribute('href', '/info/verfassung');
   });
 });

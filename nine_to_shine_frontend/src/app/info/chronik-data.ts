@@ -48,7 +48,7 @@ export const chronikEntries: ChronikEntry[] = [
     ],
     images: [
       {
-        src: '/chronik/snag-538067.png',
+        src: '/info/snag-538067.png',
         alt: 'Spielzeugboxer mit goldenem Siegerkranz vor einem Pokal',
         width: 945,
         height: 479,

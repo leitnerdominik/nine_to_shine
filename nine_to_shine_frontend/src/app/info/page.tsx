@@ -40,7 +40,7 @@ export default function ChronikPage() {
   return (
     <Layout>
       <Box sx={{ width: '100%', maxWidth: 1000, mx: 'auto', pb: 4 }}>
-        <CustomTitle text="Vereinsinfos" />
+        <CustomTitle text="Informationen" />
         <Grid2 container spacing={3} sx={{ mt: 2 }}>
           {infoCards.map((card) => (
             <Grid2 key={card.title} size={{ xs: 12, sm: 6, md: 4 }}>

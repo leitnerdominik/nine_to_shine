@@ -18,12 +18,12 @@ describe('Chronik entries page', () => {
     expect(links[0]).toHaveTextContent('Hauptversammlung 2025');
     expect(links[0]).toHaveAttribute(
       'href',
-      '/chronik/eintraege/1Mzawp47DRaeL8vcGVYALp'
+      '/info/eintraege/1Mzawp47DRaeL8vcGVYALp'
     );
     expect(links[1]).toHaveTextContent('Treffen Dezember 2024');
     expect(links[1]).toHaveAttribute(
       'href',
-      '/chronik/eintraege/6BqVUYvbSoeU1o32iQvmtZ'
+      '/info/eintraege/6BqVUYvbSoeU1o32iQvmtZ'
     );
   });
 });
