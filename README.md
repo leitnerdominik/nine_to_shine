@@ -106,10 +106,6 @@ The frontend runs on:
 http://localhost:3000
 ```
 
-### Security Note
-
-Do not commit real `.env` files, production settings, database passwords, Firebase credentials, bearer tokens, or generated logs. Keep local configuration files private and use the provided example files as templates only.
-
 ## Usage Examples
 
 Start the backend:
