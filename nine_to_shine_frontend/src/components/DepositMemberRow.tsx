@@ -6,26 +6,20 @@ import {
   Checkbox,
   TextField,
   InputAdornment,
-  Button,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
 import {
   Control,
   UseFormRegister,
   FieldErrors,
-  UseFormSetValue,
-  UseFormGetValues,
   useWatch,
 } from 'react-hook-form';
-import { FormInput, STD_MEMBER, STD_CLUB } from '../schema/deposit';
+import { FormInput } from '../schema/deposit';
 
 interface MemberRowProps {
   index: number;
   control: Control<FormInput>;
   register: UseFormRegister<FormInput>;
   errors: FieldErrors<FormInput>;
-  setValue: UseFormSetValue<FormInput>;
-  getValues: UseFormGetValues<FormInput>;
 }
 
 export default function DepositMemberRow({
@@ -33,8 +27,6 @@ export default function DepositMemberRow({
   control,
   register,
   errors,
-  setValue,
-  getValues,
 }: MemberRowProps) {
   const hasPaid = useWatch({ control, name: `entries.${index}.hasPaid` });
   const displayName = useWatch({
@@ -43,25 +35,6 @@ export default function DepositMemberRow({
   });
 
   const rowError = errors.entries?.[index];
-
-  const handleAddStandard = () => {
-    const currentMember =
-      parseFloat(getValues(`entries.${index}.memberAmount`) || '0') || 0;
-    const currentClub =
-      parseFloat(getValues(`entries.${index}.clubAmount`) || '0') || 0;
-
-    const addMember = parseFloat(STD_MEMBER);
-    const addClub = parseFloat(STD_CLUB);
-
-    setValue(
-      `entries.${index}.memberAmount`,
-      String(currentMember + addMember),
-      { shouldValidate: true }
-    );
-    setValue(`entries.${index}.clubAmount`, String(currentClub + addClub), {
-      shouldValidate: true,
-    });
-  };
 
   return (
     <Stack
@@ -124,17 +97,6 @@ export default function DepositMemberRow({
           }}
           fullWidth
         />
-
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={handleAddStandard}
-          disabled={!hasPaid}
-          sx={{ minWidth: '40px', p: 1 }}
-          title="Standardbetrag hinzufügen"
-        >
-          <AddIcon fontSize="small" />
-        </Button>
       </Stack>
 
       <TextField
