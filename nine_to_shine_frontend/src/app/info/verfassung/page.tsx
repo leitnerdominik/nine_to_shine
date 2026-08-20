@@ -1,3 +1,10 @@
+import {
+  constitutionIntroduction,
+  constitutionMotto,
+  fullConstitutionSections,
+  type ConstitutionListItem,
+} from './constitution-data';
+import PunishmentTable from '../strafenkatalog/PunishmentTable';
 import CustomTitle from '@/components/CustomTitle';
 import Layout from '@/components/Layout';
 import {
@@ -110,6 +117,190 @@ function RoleSection({ title, duties }: RoleSectionProps) {
   );
 }
 
+function ConstitutionList({ items }: { items: readonly ConstitutionListItem[] }) {
+  return (
+    <List
+      component="ul"
+      disablePadding
+      sx={{ mt: 1, pl: { xs: 3, sm: 4 }, listStyleType: 'disc' }}
+    >
+      {items.map((item) => (
+        <ListItem
+          component="li"
+          disableGutters
+          key={item.text}
+          sx={{ display: 'list-item', py: 0.35 }}
+        >
+          <Typography component="span" lineHeight={1.75}>
+            {item.text}
+          </Typography>
+          {item.children && (
+            <List
+              component="ul"
+              disablePadding
+              sx={{ mt: 0.5, pl: 3, listStyleType: 'circle' }}
+            >
+              {item.children.map((child) => (
+                <ListItem
+                  component="li"
+                  disableGutters
+                  key={child}
+                  sx={{ display: 'list-item', py: 0.2 }}
+                >
+                  <Typography component="span" lineHeight={1.7}>
+                    {child}
+                  </Typography>
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </ListItem>
+      ))}
+    </List>
+  );
+}
+
+function FullConstitution() {
+  return (
+    <Box
+      component="article"
+      aria-labelledby="full-constitution-heading"
+      sx={{ mt: { xs: 5, sm: 6 } }}
+    >
+      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2.5 }}>
+        <Typography
+          id="full-constitution-heading"
+          component="h2"
+          variant="h5"
+          fontWeight={700}
+        >
+          Verfassung „Nine to Shine“
+        </Typography>
+        <Divider sx={{ flexGrow: 1 }} />
+      </Stack>
+
+      <Paper
+        variant="outlined"
+        sx={{
+          p: { xs: 2, sm: 3 },
+          borderRadius: 3,
+          borderColor: 'divider',
+          bgcolor: 'rgba(4, 150, 255, 0.025)',
+        }}
+      >
+        <Box component="section" aria-labelledby="introduction-heading">
+          <Typography
+            id="introduction-heading"
+            component="h3"
+            variant="h6"
+            color="primary.main"
+            fontWeight={700}
+            gutterBottom
+          >
+            Einleitung
+          </Typography>
+          <Typography component="p" lineHeight={1.75}>
+            {constitutionIntroduction}
+          </Typography>
+        </Box>
+
+        <Divider sx={{ my: { xs: 2.5, sm: 3 } }} />
+
+        {fullConstitutionSections.map((section, index) => (
+          <Box key={section.id}>
+            <Box
+              component="section"
+              aria-labelledby={`${section.id}-heading`}
+            >
+              <Typography
+                id={`${section.id}-heading`}
+                component="h3"
+                variant="h6"
+                color="primary.main"
+                fontWeight={700}
+                gutterBottom
+              >
+                {section.title}
+              </Typography>
+
+              {section.paragraphs?.map((paragraph) => (
+                <Typography
+                  component="p"
+                  key={paragraph}
+                  lineHeight={1.75}
+                  sx={{ mb: 1 }}
+                >
+                  {paragraph}
+                </Typography>
+              ))}
+
+              {section.items && <ConstitutionList items={section.items} />}
+
+              {section.subheading && (
+                <Typography
+                  component="h4"
+                  variant="subtitle1"
+                  color="primary.main"
+                  fontWeight={700}
+                  sx={{ mt: 2.5, mb: 0.5 }}
+                >
+                  {section.subheading}
+                </Typography>
+              )}
+
+              {section.roles && (
+                <List
+                  component="ul"
+                  disablePadding
+                  sx={{ mt: 1, pl: { xs: 3, sm: 4 }, listStyleType: 'disc' }}
+                >
+                  {section.roles.map((role) => (
+                    <ListItem
+                      component="li"
+                      disableGutters
+                      key={role.title}
+                      sx={{ display: 'list-item', py: 0.35 }}
+                    >
+                      <Typography component="span" lineHeight={1.75}>
+                        <Box component="strong" fontWeight={700}>
+                          {role.title}:
+                        </Box>{' '}
+                        {role.description}
+                      </Typography>
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+
+              {section.includesPunishmentTable && (
+                <Box sx={{ mt: 2, maxWidth: '100%' }}>
+                  <PunishmentTable />
+                </Box>
+              )}
+            </Box>
+
+            {index < fullConstitutionSections.length - 1 && (
+              <Divider sx={{ my: { xs: 2.5, sm: 3 } }} />
+            )}
+          </Box>
+        ))}
+
+        <Divider sx={{ my: { xs: 3, sm: 4 } }} />
+        <Typography
+          component="p"
+          align="center"
+          variant="h6"
+          fontStyle="italic"
+          lineHeight={1.6}
+          sx={{ px: { sm: 4 }, pb: 1 }}
+        >
+          {constitutionMotto}
+        </Typography>
+      </Paper>
+    </Box>
+  );
+}
+
 export default function ConstitutionPage() {
   return (
     <Layout>
@@ -151,7 +342,7 @@ export default function ConstitutionPage() {
               variant="h5"
               fontWeight={700}
             >
-              Verfassung
+              Regeln
             </Typography>
             <Divider sx={{ flexGrow: 1 }} />
           </Stack>
@@ -207,6 +398,8 @@ export default function ConstitutionPage() {
             </List>
           </Paper>
         </Box>
+
+        <FullConstitution />
       </Box>
     </Layout>
   );
