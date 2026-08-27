@@ -175,7 +175,6 @@ nine_to_shine/
 │   │   └── schema/               # Zod validation schemas
 │   ├── .env.example              # Frontend configuration template
 │   └── package.json              # Frontend scripts and dependencies
-├── AGENTS.md                     # Repository guidance for AI coding agents
 ├── LICENSE
 └── README.md
 ```
