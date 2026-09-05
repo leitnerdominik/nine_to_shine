@@ -19,7 +19,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        Factory = new NineToShineApiFactory(_postgres.ConnectionString);
+        Factory = new NineToShineApiFactory(_postgres.Lease);
         _ = Factory.Server;
         await Factory.ResetDatabaseAsync();
         Client = Factory.CreateAuthenticatedClient();

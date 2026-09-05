@@ -109,20 +109,23 @@ app.MapControllers();
 
 try
 {
-    using (var scope = app.Services.CreateScope())
+    if (!app.Environment.IsEnvironment("Testing"))
     {
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        try
-        {
-            await db.Database.MigrateAsync(); // ensures DB & runs all migrations
-            app.Logger.LogInformation("Datenbankmigration erfolgreich.");
-            Console.WriteLine("Datenbankmigration erfolgreich.");
-        }
-        catch (Exception ex)
-        {
-            app.Logger.LogError(ex, "DB-Migration fehlgeschlagen");
-            Console.WriteLine($"DB-Migration fehlgeschlagen: {ex.Message}");
+            try
+            {
+                await db.Database.MigrateAsync(); // ensures DB & runs all migrations
+                app.Logger.LogInformation("Datenbankmigration erfolgreich.");
+                Console.WriteLine("Datenbankmigration erfolgreich.");
+            }
+            catch (Exception ex)
+            {
+                app.Logger.LogError(ex, "DB-Migration fehlgeschlagen");
+                Console.WriteLine($"DB-Migration fehlgeschlagen: {ex.Message}");
+            }
         }
     }
 

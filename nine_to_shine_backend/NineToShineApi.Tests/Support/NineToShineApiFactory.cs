@@ -13,11 +13,11 @@ namespace NineToShineApi.Tests.Support;
 
 public sealed class NineToShineApiFactory : WebApplicationFactory<Program>
 {
-    private readonly string _connectionString;
+    private readonly PostgresFixture.TestDatabaseLease _databaseLease;
 
-    public NineToShineApiFactory(string connectionString)
+    public NineToShineApiFactory(PostgresFixture.TestDatabaseLease databaseLease)
     {
-        _connectionString = connectionString;
+        _databaseLease = databaseLease;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -28,7 +28,7 @@ public sealed class NineToShineApiFactory : WebApplicationFactory<Program>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ConnectionStrings:DefaultConnection"] = _connectionString,
+                ["ConnectionStrings:DefaultConnection"] = _databaseLease.ConnectionString,
                 ["Firebase:ProjectId"] = "nine-to-shine-tests"
             });
         });
@@ -38,7 +38,7 @@ public sealed class NineToShineApiFactory : WebApplicationFactory<Program>
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<DbContextOptions<AppDbContext>>();
-            services.AddDbContext<AppDbContext>(options => options.UseNpgsql(_connectionString));
+            services.AddDbContext<AppDbContext>(options => options.UseNpgsql(_databaseLease.ConnectionString));
 
             services
                 .AddAuthentication(options =>
@@ -67,6 +67,9 @@ public sealed class NineToShineApiFactory : WebApplicationFactory<Program>
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        TestDatabaseSafety.EnsureResetIsAllowed(
+            _databaseLease.DatabaseName,
+            db.Database.GetDbConnection().Database);
         await db.Database.EnsureDeletedAsync();
         await db.Database.MigrateAsync();
     }
