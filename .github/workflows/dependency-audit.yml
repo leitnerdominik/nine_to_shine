@@ -1,0 +1,46 @@
+name: Dependency audit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev
+      - main
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nine_to_shine_frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: nine_to_shine_frontend/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=low
+
+  nuget:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nine_to_shine_backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore NineToShineApi.sln
+      - name: Reject vulnerable NuGet packages
+        run: |
+          dotnet list NineToShineApi.sln package --vulnerable --include-transitive --format json | tee nuget-audit.json
+          jq -e '[.projects[] | .frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?)] | length == 0' nuget-audit.json

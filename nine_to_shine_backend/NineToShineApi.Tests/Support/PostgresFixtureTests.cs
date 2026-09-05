@@ -9,8 +9,7 @@ public sealed class PostgresFixtureTests
     [Fact]
     public async Task External_connection_creates_uses_and_removes_an_isolated_database()
     {
-        await using var bootstrapContainer = new PostgreSqlBuilder()
-            .WithImage("postgres:16-alpine")
+        await using var bootstrapContainer = new PostgreSqlBuilder("postgres:16-alpine")
             .WithDatabase("fixture_bootstrap")
             .WithUsername("postgres")
             .WithPassword("postgres")

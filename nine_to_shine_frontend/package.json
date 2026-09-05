@@ -17,10 +17,10 @@
     "@hookform/resolvers": "^5.2.2",
     "@mui/icons-material": "^6.1.10",
     "@mui/material": "^6.1.10",
-    "axios": "^1.13.2",
+    "axios": "^1.18.0",
     "dayjs": "^1.11.13",
     "firebase": "^11.1.0",
-    "next": "15.5.19",
+    "next": "15.5.25",
     "notistack": "^3.0.1",
     "react": "18.2.0",
     "react-dom": "18.2.0",
@@ -37,10 +37,13 @@
     "@types/react-dom": "^18",
     "@vitest/coverage-v8": "^4.1.9",
     "eslint": "^8",
-    "eslint-config-next": "15.5.19",
+    "eslint-config-next": "15.5.25",
     "jsdom": "^29.1.1",
     "msw": "^2.14.6",
     "typescript": "^5",
     "vitest": "^4.1.9"
+  },
+  "overrides": {
+    "postcss": "8.5.28"
   }
 }
