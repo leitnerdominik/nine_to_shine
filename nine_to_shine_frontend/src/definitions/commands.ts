@@ -19,6 +19,7 @@ import {
   CreateTripSplitRequest,
   ReplaceTripSplitRequest,
   ReplaceGameDepositsRequest,
+  SaveRankedGameRequest,
   UpdateFinanceRequest,
   TopRankedDto,
   UpdateOrganizerRotationRequest,
@@ -187,6 +188,15 @@ export const apiRanking = {
   async create(body: CreateRankingRequest): Promise<RankingDto> {
     try {
       const { data } = await api.post<RankingDto>('/ranking', body);
+      return data;
+    } catch (e) {
+      throw toApiRequestError(e);
+    }
+  },
+
+  async saveGameSnapshot(body: SaveRankedGameRequest): Promise<GameDto> {
+    try {
+      const { data } = await api.post<GameDto>('/ranking/game-snapshot', body);
       return data;
     } catch (e) {
       throw toApiRequestError(e);

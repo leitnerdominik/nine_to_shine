@@ -110,6 +110,108 @@ namespace NineToShineApi.Controllers
             ));
         }
 
+        // POST: api/ranking/game-snapshot
+        [HttpPost("game-snapshot")]
+        public async Task<ActionResult<GameDto>> SaveGameSnapshot(
+            [FromBody] SaveRankedGameRequest body,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblem(ModelState);
+
+            if (string.IsNullOrWhiteSpace(body.GameName))
+                return BadRequest(new { error = "game_name must not be empty." });
+
+            var duplicateUserId = body.Rankings
+                .GroupBy(ranking => ranking.UserId)
+                .FirstOrDefault(group => group.Count() > 1)
+                ?.Key;
+            if (duplicateUserId.HasValue)
+            {
+                return Conflict(new
+                {
+                    error = $"Ranking for user_id {duplicateUserId.Value} occurs more than once."
+                });
+            }
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+
+            var seasonExists = await _db.Season.AnyAsync(
+                season => season.Id == body.SeasonId,
+                ct);
+            if (!seasonExists)
+                return BadRequest(new { error = "season_id not found." });
+
+            var organizer = await _db.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(user => user.Id == body.OrganizedByUserId, ct);
+            if (organizer is null)
+                return BadRequest(new { error = "organized_by_user_id not found." });
+
+            var rankingUserIds = body.Rankings
+                .Select(ranking => ranking.UserId)
+                .ToList();
+            var existingRankingUserIds = await _db.Users
+                .AsNoTracking()
+                .Where(user => rankingUserIds.Contains(user.Id))
+                .Select(user => user.Id)
+                .ToListAsync(ct);
+            var missingUserIds = rankingUserIds
+                .Except(existingRankingUserIds)
+                .ToList();
+            if (missingUserIds.Count > 0)
+                return BadRequest(new { error = $"user_id {missingUserIds[0]} not found." });
+
+            Game entity;
+            if (body.GameId.HasValue)
+            {
+                var existingGame = await _db.Game
+                    .FirstOrDefaultAsync(game => game.Id == body.GameId.Value, ct);
+                if (existingGame is null)
+                    return NotFound(new { error = "game_id not found." });
+                entity = existingGame;
+
+                var previousRankings = await _db.Rankings
+                    .Where(ranking => ranking.GameId == entity.Id)
+                    .ToListAsync(ct);
+                _db.Rankings.RemoveRange(previousRankings);
+            }
+            else
+            {
+                entity = new Game();
+                _db.Game.Add(entity);
+            }
+
+            entity.SeasonId = body.SeasonId;
+            entity.PlayedAt = body.PlayedAt!.Value;
+            entity.GameName = body.GameName.Trim();
+            entity.OrganizedByUserId = body.OrganizedByUserId;
+
+            // Persist metadata and removals before inserting the replacement rows so
+            // their unique (game_id, user_id) keys cannot overlap. The transaction
+            // keeps this intermediate state invisible unless the full snapshot saves.
+            await _db.SaveChangesAsync(ct);
+
+            _db.Rankings.AddRange(body.Rankings.Select(ranking => new Ranking
+            {
+                GameId = entity.Id,
+                UserId = ranking.UserId,
+                Points = ranking.Points,
+                IsPresent = ranking.IsPresent!.Value
+            }));
+
+            await _db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            return Ok(new GameDto(
+                entity.Id,
+                entity.SeasonId,
+                entity.PlayedAt,
+                entity.GameName,
+                entity.OrganizedByUserId,
+                organizer.DisplayName));
+        }
+
         // POST: api/ranking
         [HttpPost]
         public async Task<ActionResult<RankingDto>> Create([FromBody] CreateRankingRequest body, CancellationToken ct)
@@ -257,6 +359,44 @@ namespace NineToShineApi.Controllers
         [Range(0, 10)]
         public int Points { get; set; }
 
+        public bool? IsPresent { get; set; }
+    }
+
+    public class SaveRankedGameRequest
+    {
+        [Range(1, long.MaxValue)]
+        public long? GameId { get; set; }
+
+        [Required]
+        [Display(Name = "season_id")]
+        public long SeasonId { get; set; }
+
+        [Required]
+        public DateTime? PlayedAt { get; set; }
+
+        [Required]
+        [MaxLength(200)]
+        public string GameName { get; set; } = string.Empty;
+
+        [Required]
+        [Display(Name = "organized_by_user_id")]
+        public long OrganizedByUserId { get; set; }
+
+        [Required]
+        [MinLength(1)]
+        public List<RankingSnapshotEntryRequest> Rankings { get; set; } = [];
+    }
+
+    public class RankingSnapshotEntryRequest
+    {
+        [Required]
+        [Display(Name = "user_id")]
+        public long UserId { get; set; }
+
+        [Range(0, int.MaxValue)]
+        public int Points { get; set; }
+
+        [Required]
         public bool? IsPresent { get; set; }
     }
 }

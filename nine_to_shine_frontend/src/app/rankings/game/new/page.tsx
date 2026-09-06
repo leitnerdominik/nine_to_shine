@@ -30,10 +30,9 @@ import {
 import type {
   SeasonDto,
   UserDto,
-  CreateGameRequest,
-  CreateRankingRequest,
   GameDto,
   RankingDto,
+  SaveRankedGameRequest,
 } from '@/definitions/types';
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
@@ -164,31 +163,19 @@ export default function SpielNeuPage() {
 
   const onSubmit = async (values: FormOutput) => {
     try {
-      let gameId: number;
-
-      if (selectedGameId !== null) {
-        // Existierendes Spiel verwenden
-        gameId = selectedGameId;
-      } else {
-        // Neues Spiel anlegen
-        const payloadGame: CreateGameRequest = {
-          seasonId: values.seasonId,
-          playedAt: new Date(values.playedAt).toISOString(),
-          gameName: values.gameName.trim(),
-          organizedByUserId: values.organizedByUserId,
-        };
-        const game = await apiGame.create(payloadGame);
-        gameId = game.id;
-      }
-
-      // Rankings anlegen (abwesende sicherheitshalber mit 1 Punkt)
-      const creates: CreateRankingRequest[] = values.entries.map((e) => ({
-        gameId,
-        userId: e.userId,
-        points: e.isPresent ? e.points : 1,
-        isPresent: e.isPresent,
-      }));
-      await Promise.all(creates.map((c) => apiRanking.create(c)));
+      const payload: SaveRankedGameRequest = {
+        ...(selectedGameId === null ? {} : { gameId: selectedGameId }),
+        seasonId: values.seasonId,
+        playedAt: new Date(values.playedAt).toISOString(),
+        gameName: values.gameName.trim(),
+        organizedByUserId: values.organizedByUserId,
+        rankings: values.entries.map((entry) => ({
+          userId: entry.userId,
+          points: entry.isPresent ? entry.points : 1,
+          isPresent: entry.isPresent,
+        })),
+      };
+      await apiRanking.saveGameSnapshot(payload);
 
       enqueueSnackbar('Spiel wurde gespeichert.', {
         variant: 'success',

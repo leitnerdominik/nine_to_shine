@@ -2,7 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using NineToShineApi.Controllers;
+using NineToShineApi.Data;
+using NineToShineApi.Models;
 using NineToShineApi.Tests.Support;
 
 namespace NineToShineApi.Tests;
@@ -111,5 +114,265 @@ public sealed class RankingControllerTests : IntegrationTestBase
 
         firstDelete.StatusCode.Should().Be(HttpStatusCode.NoContent);
         secondDelete.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Save_game_snapshot_creates_and_replaces_the_complete_snapshot()
+    {
+        var nina = TestUser();
+        var alex = TestUser("Alex", "alex@example.test");
+        var season = TestSeason();
+        var replacementSeason = TestSeason(2);
+        await SeedAsync(nina, alex, season, replacementSeason);
+
+        var create = await Client.PostAsJsonAsync("/api/ranking/game-snapshot", new
+        {
+            seasonId = season.Id,
+            playedAt = new DateTime(2026, 9, 6, 18, 0, 0, DateTimeKind.Utc),
+            gameName = "Tennis",
+            organizedByUserId = nina.Id,
+            rankings = new[]
+            {
+                new { userId = nina.Id, points = 9, isPresent = true },
+                new { userId = alex.Id, points = 1, isPresent = false }
+            }
+        });
+
+        create.StatusCode.Should().Be(HttpStatusCode.OK);
+        var createdGame = await create.Content.ReadFromJsonAsync<GameDto>();
+        createdGame.Should().NotBeNull();
+        var createdRankings = await WithDbContextAsync(db => db.Rankings
+            .AsNoTracking()
+            .OrderBy(ranking => ranking.UserId)
+            .ToListAsync());
+        createdRankings.Should().HaveCount(2);
+        createdRankings.Should().Contain(ranking =>
+            ranking.GameId == createdGame!.Id &&
+            ranking.UserId == alex.Id &&
+            ranking.Points == 1 &&
+            !ranking.IsPresent);
+
+        var update = await Client.PostAsJsonAsync("/api/ranking/game-snapshot", new
+        {
+            gameId = createdGame!.Id,
+            seasonId = replacementSeason.Id,
+            playedAt = new DateTime(2026, 9, 7, 18, 0, 0, DateTimeKind.Utc),
+            gameName = "Badminton",
+            organizedByUserId = alex.Id,
+            rankings = new[]
+            {
+                new { userId = alex.Id, points = 7, isPresent = true }
+            }
+        });
+
+        update.StatusCode.Should().Be(HttpStatusCode.OK);
+        var persisted = await WithDbContextAsync(async db => new
+        {
+            Game = await db.Game.AsNoTracking().SingleAsync(),
+            Rankings = await db.Rankings.AsNoTracking().ToListAsync()
+        });
+        persisted.Game.GameName.Should().Be("Badminton");
+        persisted.Game.SeasonId.Should().Be(replacementSeason.Id);
+        persisted.Game.OrganizedByUserId.Should().Be(alex.Id);
+        persisted.Game.PlayedAt.Should().Be(
+            new DateTime(2026, 9, 7, 18, 0, 0, DateTimeKind.Utc));
+        persisted.Rankings.Should().ContainSingle(ranking =>
+            ranking.GameId == createdGame.Id &&
+            ranking.UserId == alex.Id &&
+            ranking.Points == 7 &&
+            ranking.IsPresent);
+    }
+
+    [Fact]
+    public async Task Save_game_snapshot_rolls_back_metadata_and_rankings_when_a_ranking_fails()
+    {
+        var nina = TestUser();
+        var alex = TestUser("Alex", "alex@example.test");
+        var season = TestSeason();
+        var replacementSeason = TestSeason(2);
+        var game = TestGame(season, nina);
+        await SeedAsync(nina, alex, season, replacementSeason, game);
+        await SeedAsync(
+            TestRanking(game.Id, nina.Id, 9),
+            TestRanking(game.Id, alex.Id, 4));
+
+        var originalRankings = await WithDbContextAsync(db => db.Rankings
+            .AsNoTracking()
+            .OrderBy(ranking => ranking.Id)
+            .Select(ranking => new
+            {
+                ranking.Id,
+                ranking.GameId,
+                ranking.UserId,
+                ranking.Points,
+                ranking.IsPresent
+            })
+            .ToListAsync());
+        var connectionString = await WithDbContextAsync(db =>
+            Task.FromResult(db.Database.GetConnectionString()));
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString!)
+            .AddInterceptors(new RankingSaveFailureInterceptor())
+            .Options;
+
+        var request = new SaveRankedGameRequest
+        {
+            GameId = game.Id,
+            SeasonId = replacementSeason.Id,
+            PlayedAt = new DateTime(2026, 9, 7, 18, 0, 0, DateTimeKind.Utc),
+            GameName = "Changed game",
+            OrganizedByUserId = alex.Id,
+            Rankings =
+            [
+                new RankingSnapshotEntryRequest
+                {
+                    UserId = nina.Id,
+                    Points = 8,
+                    IsPresent = true
+                },
+                new RankingSnapshotEntryRequest
+                {
+                    UserId = alex.Id,
+                    Points = 5,
+                    IsPresent = true
+                }
+            ]
+        };
+
+        await ForceRankingSaveFailureAsync(options, request);
+
+        var persisted = await WithDbContextAsync(async db => new
+        {
+            Game = await db.Game.AsNoTracking().SingleAsync(),
+            Rankings = await db.Rankings
+                .AsNoTracking()
+                .OrderBy(ranking => ranking.Id)
+                .Select(ranking => new
+                {
+                    ranking.Id,
+                    ranking.GameId,
+                    ranking.UserId,
+                    ranking.Points,
+                    ranking.IsPresent
+                })
+                .ToListAsync()
+        });
+        persisted.Game.SeasonId.Should().Be(season.Id);
+        persisted.Game.PlayedAt.Should().Be(
+            new DateTime(2026, 6, 15, 18, 0, 0, DateTimeKind.Utc));
+        persisted.Game.GameName.Should().Be("Tennis");
+        persisted.Game.OrganizedByUserId.Should().Be(nina.Id);
+        persisted.Rankings.Should().BeEquivalentTo(originalRankings, options =>
+            options.WithStrictOrdering());
+    }
+
+    [Fact]
+    public async Task Save_game_snapshot_rolls_back_a_new_game_when_a_ranking_fails()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        await SeedAsync(nina, season);
+
+        var connectionString = await WithDbContextAsync(db =>
+            Task.FromResult(db.Database.GetConnectionString()));
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString!)
+            .AddInterceptors(new RankingSaveFailureInterceptor())
+            .Options;
+        var request = new SaveRankedGameRequest
+        {
+            SeasonId = season.Id,
+            PlayedAt = new DateTime(2026, 9, 7, 18, 0, 0, DateTimeKind.Utc),
+            GameName = "Orphan candidate",
+            OrganizedByUserId = nina.Id,
+            Rankings =
+            [
+                new RankingSnapshotEntryRequest
+                {
+                    UserId = nina.Id,
+                    Points = 9,
+                    IsPresent = true
+                }
+            ]
+        };
+
+        await ForceRankingSaveFailureAsync(options, request);
+
+        var rowCounts = await WithDbContextAsync(async db => new
+        {
+            Games = await db.Game.CountAsync(),
+            Rankings = await db.Rankings.CountAsync()
+        });
+        rowCounts.Games.Should().Be(0);
+        rowCounts.Rankings.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Save_game_snapshot_rejects_duplicate_users_without_changing_existing_data()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, nina);
+        await SeedAsync(nina, season, game);
+        await SeedAsync(TestRanking(game.Id, nina.Id, 9));
+
+        var response = await Client.PostAsJsonAsync("/api/ranking/game-snapshot", new
+        {
+            gameId = game.Id,
+            seasonId = season.Id,
+            playedAt = new DateTime(2026, 9, 7, 18, 0, 0, DateTimeKind.Utc),
+            gameName = "Changed game",
+            organizedByUserId = nina.Id,
+            rankings = new[]
+            {
+                new { userId = nina.Id, points = 8, isPresent = true },
+                new { userId = nina.Id, points = 7, isPresent = true }
+            }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var persisted = await WithDbContextAsync(async db => new
+        {
+            Game = await db.Game.AsNoTracking().SingleAsync(),
+            Rankings = await db.Rankings.AsNoTracking().ToListAsync()
+        });
+        persisted.Game.GameName.Should().Be("Tennis");
+        persisted.Game.PlayedAt.Should().Be(
+            new DateTime(2026, 6, 15, 18, 0, 0, DateTimeKind.Utc));
+        persisted.Rankings.Should().ContainSingle(ranking =>
+            ranking.GameId == game.Id &&
+            ranking.UserId == nina.Id &&
+            ranking.Points == 9);
+    }
+
+    private static async Task ForceRankingSaveFailureAsync(
+        DbContextOptions<AppDbContext> options,
+        SaveRankedGameRequest request)
+    {
+        await using var db = new AppDbContext(options);
+        var controller = new RankingController(db);
+        Func<Task> act = async () =>
+            await controller.SaveGameSnapshot(request, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("Forced ranking save failure.");
+    }
+
+    private sealed class RankingSaveFailureInterceptor : SaveChangesInterceptor
+    {
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (eventData.Context?.ChangeTracker.Entries<Ranking>()
+                .Any(entry => entry.State == EntityState.Added) == true)
+            {
+                return ValueTask.FromException<InterceptionResult<int>>(
+                    new InvalidOperationException("Forced ranking save failure."));
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
     }
 }

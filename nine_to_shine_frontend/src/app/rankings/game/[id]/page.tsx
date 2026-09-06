@@ -33,8 +33,7 @@ import type {
   UserDto,
   GameDto,
   RankingDto,
-  CreateRankingRequest,
-  CreateGameRequest,
+  SaveRankedGameRequest,
 } from '@/definitions/types';
 import dayjs from 'dayjs';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
@@ -65,16 +64,6 @@ const schema = z.object({
 type FormInput = z.input<typeof schema>;
 type FormOutput = z.output<typeof schema>;
 
-// ---------- Typsichere Helpers für optionale API-Methoden ----------
-function hasDeleteByGame(
-  x: unknown
-): x is { deleteByGame: (gameId: number) => Promise<void> } {
-  return typeof (x as Record<string, unknown>)?.['deleteByGame'] === 'function';
-}
-function hasRemove(x: unknown): x is { remove: (id: number) => Promise<void> } {
-  return typeof (x as Record<string, unknown>)?.['remove'] === 'function';
-}
-
 export default function SpielBearbeitenPage() {
   const { enqueueSnackbar } = useSnackbar();
   const router = useRouter();
@@ -84,7 +73,6 @@ export default function SpielBearbeitenPage() {
   const [seasons, setSeasons] = useState<SeasonDto[]>([]);
   const [users, setUsers] = useState<UserDto[]>([]);
   const [game, setGame] = useState<GameDto | null>(null);
-  const [rankings, setRankings] = useState<RankingDto[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   const {
@@ -128,8 +116,6 @@ export default function SpielBearbeitenPage() {
         setGame(g);
 
         const rs = rAll.filter((x) => x.gameId === gameId);
-        setRankings(rs);
-
         const rByUser = new Map<number, RankingDto>();
         rs.forEach((r) => rByUser.set(r.userId, r));
 
@@ -175,34 +161,19 @@ export default function SpielBearbeitenPage() {
     try {
       if (!Number.isFinite(gameId)) throw new Error('Ungültige Spiel-ID.');
 
-      // 1) Spiel aktualisieren
-      const payloadGame: CreateGameRequest = {
+      const payload: SaveRankedGameRequest = {
+        gameId,
         seasonId: values.seasonId,
         playedAt: new Date(values.playedAt).toISOString(),
         gameName: values.gameName.trim(),
         organizedByUserId: values.organizedByUserId,
+        rankings: values.entries.map((entry) => ({
+          userId: entry.userId,
+          points: entry.isPresent ? entry.points : 1,
+          isPresent: entry.isPresent,
+        })),
       };
-      await apiGame.update(gameId, payloadGame);
-
-      // 2) Rankings ersetzen (wenn API vorhanden)
-      const rankingApiAsUnknown: unknown = apiRanking;
-
-      if (hasDeleteByGame(rankingApiAsUnknown)) {
-        await rankingApiAsUnknown.deleteByGame(gameId);
-      } else if (hasRemove(rankingApiAsUnknown)) {
-        // Fallback: vorhandene Rankings einzeln löschen
-        await Promise.all(
-          rankings.map((r) => rankingApiAsUnknown.remove(r.id))
-        );
-      }
-      // Neu anlegen
-      const creates: CreateRankingRequest[] = values.entries.map((e) => ({
-        gameId,
-        userId: e.userId,
-        points: e.isPresent ? e.points : 1,
-        isPresent: e.isPresent,
-      }));
-      await Promise.all(creates.map((c) => apiRanking.create(c)));
+      await apiRanking.saveGameSnapshot(payload);
 
       enqueueSnackbar('Spiel wurde aktualisiert.', { variant: 'success' });
       router.push(`/rankings/${gameId}`);

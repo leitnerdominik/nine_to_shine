@@ -122,11 +122,14 @@ cd nine_to_shine_frontend
 npm run dev
 ```
 
-Check API health:
+Check API readiness (including PostgreSQL connectivity):
 
 ```bash
 curl http://localhost:5006/api/health
 ```
+
+The explicit readiness endpoint is `/api/health/ready`. Process liveness without
+dependency checks is available at `/api/health/live`.
 
 Open Swagger in a browser during development:
 

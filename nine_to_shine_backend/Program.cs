@@ -7,8 +7,12 @@ using System;
 using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Serilog;
+
+const string ReadinessTag = "ready";
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,7 +35,12 @@ builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
 });
 
-builder.Services.AddHealthChecks();
+builder.Services
+    .AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>(
+        "postgresql",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: [ReadinessTag]);
 
 // Configure PostgreSQL
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -103,7 +112,17 @@ app.UseAuthorization();
 
 app.UseMiddleware<RequestLoggingMiddleware>();
 
-app.MapHealthChecks("/api/health");
+var readinessOptions = new HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains(ReadinessTag)
+};
+
+app.MapHealthChecks("/api/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false
+});
+app.MapHealthChecks("/api/health/ready", readinessOptions);
+app.MapHealthChecks("/api/health", readinessOptions);
 app.MapControllers();
 
 
@@ -115,54 +134,44 @@ try
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            try
-            {
-                await db.Database.MigrateAsync(); // ensures DB & runs all migrations
-                app.Logger.LogInformation("Datenbankmigration erfolgreich.");
-                Console.WriteLine("Datenbankmigration erfolgreich.");
-            }
-            catch (Exception ex)
-            {
-                app.Logger.LogError(ex, "DB-Migration fehlgeschlagen");
-                Console.WriteLine($"DB-Migration fehlgeschlagen: {ex.Message}");
-            }
+            await db.Database.MigrateAsync(); // ensures DB & runs all migrations
+            app.Logger.LogInformation("Datenbankmigration erfolgreich.");
+            Console.WriteLine("Datenbankmigration erfolgreich.");
         }
     }
-
-    using (var scope = app.Services.CreateScope())
-    {
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        try
-        {
-            var can = await db.Database.CanConnectAsync();
-            if (can)
-            {
-                app.Logger.LogInformation("Verbunden mit Datenbank");
-                Console.WriteLine("Verbunden mit Datenbank");
-            }
-            else
-            {
-                app.Logger.LogError("Keine Verbindung zur Datenbank");
-                Console.WriteLine("Keine Verbindung zur Datenbank");
-            }
-        }
-        catch (Exception ex)
-        {
-            app.Logger.LogError(ex, "DB-Check fehlgeschlagen");
-            Console.WriteLine($"DB-Check fehlgeschlagen: {ex.Message}");
-        }
-    }
-
 
     app.Run();
 }
 catch (Exception ex)
 {
     Log.Fatal(ex, "Application start-up failed");
+    throw;
 }
 finally
 {
     Log.CloseAndFlush();
+}
+
+internal sealed class DatabaseHealthCheck(IServiceScopeFactory scopeFactory) : IHealthCheck
+{
+    public async Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            return await db.Database.CanConnectAsync(cancellationToken)
+                ? HealthCheckResult.Healthy("PostgreSQL is reachable.")
+                : HealthCheckResult.Unhealthy("PostgreSQL is unreachable.");
+        }
+        catch (Exception ex)
+        {
+            return HealthCheckResult.Unhealthy("PostgreSQL connectivity check failed.", ex);
+        }
+    }
 }
 
 public partial class Program { }

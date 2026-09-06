@@ -1,5 +1,11 @@
+using System.Diagnostics;
 using System.Net;
 using FluentAssertions;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using NineToShineApi.Data;
 using NineToShineApi.Tests.Support;
 
 namespace NineToShineApi.Tests;
@@ -10,14 +16,103 @@ public sealed class AuthAndInfrastructureTests : IntegrationTestBase
     {
     }
 
-    [Fact]
-    public async Task Health_endpoint_is_public()
+    [Theory]
+    [InlineData("/api/health")]
+    [InlineData("/api/health/ready")]
+    [InlineData("/api/health/live")]
+    public async Task Health_endpoints_are_public_and_healthy_when_database_is_available(string path)
     {
         using var anonymousClient = Factory.CreateClient();
 
-        var response = await anonymousClient.GetAsync("/api/health");
+        var response = await anonymousClient.GetAsync(path);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Readiness_is_unhealthy_while_liveness_stays_healthy_when_database_is_unavailable()
+    {
+        const string unavailableConnectionString =
+            "Host=127.0.0.1;Port=1;Database=unavailable;Username=test;Password=test;" +
+            "Timeout=1;Command Timeout=1;Pooling=false";
+
+        using var factory = Factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<DbContextOptions<AppDbContext>>();
+                services.AddDbContext<AppDbContext>(options =>
+                    options.UseNpgsql(unavailableConnectionString));
+            });
+        });
+        using var anonymousClient = factory.CreateClient();
+
+        var readinessResponse = await anonymousClient.GetAsync("/api/health/ready");
+        var compatibilityResponse = await anonymousClient.GetAsync("/api/health");
+        var livenessResponse = await anonymousClient.GetAsync("/api/health/live");
+
+        readinessResponse.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        compatibilityResponse.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        livenessResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Migration_failure_stops_application_startup()
+    {
+        const string unavailableConnectionString =
+            "Host=127.0.0.1;Port=1;Database=unavailable;Username=test;Password=test;" +
+            "Timeout=1;Command Timeout=1;Pooling=false";
+        var workingDirectory = Path.Combine(
+            Path.GetTempPath(),
+            $"nine-to-shine-startup-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(workingDirectory);
+
+        try
+        {
+            var startInfo = new ProcessStartInfo("dotnet")
+            {
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                WorkingDirectory = workingDirectory
+            };
+            startInfo.ArgumentList.Add(typeof(Program).Assembly.Location);
+            startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
+            startInfo.Environment["DOTNET_ENVIRONMENT"] = "Production";
+            startInfo.Environment["ConnectionStrings__DefaultConnection"] = unavailableConnectionString;
+            startInfo.Environment["Firebase__ProjectId"] = "nine-to-shine-tests";
+
+            using var process = Process.Start(startInfo);
+            process.Should().NotBeNull();
+
+            var standardOutput = process!.StandardOutput.ReadToEndAsync();
+            var standardError = process.StandardError.ReadToEndAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync();
+                throw;
+            }
+
+            var output = await standardOutput + await standardError;
+
+            process.ExitCode.Should().NotBe(0, "the startup output was: {0}", output);
+            output.Should()
+                .Contain("Application start-up failed")
+                .And.Contain("MigrateAsync")
+                .And.Contain("unavailable");
+        }
+        finally
+        {
+            Directory.Delete(workingDirectory, recursive: true);
+        }
     }
 
     [Fact]

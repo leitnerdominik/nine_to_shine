@@ -180,4 +180,26 @@ describe('API command wrappers', () => {
 
     expect(apiModule.api.get).toHaveBeenCalledWith('/Ranking/top?seasonId=5');
   });
+
+  it('saves a ranked game and its complete ranking snapshot atomically', async () => {
+    apiModule.api.post.mockResolvedValueOnce({ data: { id: 7 } });
+    const payload = {
+      gameId: 7,
+      seasonId: 2,
+      playedAt: '2026-09-06T00:00:00.000Z',
+      gameName: 'Tennis',
+      organizedByUserId: 3,
+      rankings: [
+        { userId: 3, points: 9, isPresent: true },
+        { userId: 4, points: 1, isPresent: false },
+      ],
+    };
+
+    await apiRanking.saveGameSnapshot(payload);
+
+    expect(apiModule.api.post).toHaveBeenCalledWith(
+      '/ranking/game-snapshot',
+      payload
+    );
+  });
 });

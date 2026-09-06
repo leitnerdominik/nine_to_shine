@@ -55,6 +55,15 @@ export type CreateRankingRequest = {
   isPresent: boolean;
 };
 
+export type SaveRankedGameRequest = CreateGameRequest & {
+  gameId?: number;
+  rankings: Array<{
+    userId: number;
+    points: number;
+    isPresent: boolean;
+  }>;
+};
+
 export interface OrganizerDutyDto {
   id: number;
   dutyDate: string; // ISO-String
