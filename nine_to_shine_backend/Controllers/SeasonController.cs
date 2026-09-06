@@ -4,6 +4,7 @@ using NineToShineApi.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using Npgsql;
 
 namespace NineToShineApi.Controllers
 {
@@ -65,9 +66,50 @@ namespace NineToShineApi.Controllers
             var entity = await _db.Season.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (entity is null) return NotFound();
 
+            var dependencies = await GetDeleteDependencies(id, ct);
+
+            if (dependencies.Count > 0)
+                return SeasonDeleteConflict(dependencies);
+
             _db.Season.Remove(entity);
-            await _db.SaveChangesAsync(ct);
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException exception) when (
+                exception.InnerException is PostgresException
+                {
+                    SqlState: PostgresErrorCodes.ForeignKeyViolation
+                })
+            {
+                return SeasonDeleteConflict(await GetDeleteDependencies(id, ct));
+            }
+
             return NoContent();
+        }
+
+        private async Task<List<string>> GetDeleteDependencies(long id, CancellationToken ct)
+        {
+            var dependencies = new List<string>();
+            if (await _db.Game.AnyAsync(x => x.SeasonId == id, ct))
+                dependencies.Add("games");
+            if (await _db.OrganizerDuties.AnyAsync(x => x.SeasonId == id, ct))
+                dependencies.Add("organizer duties");
+
+            return dependencies;
+        }
+
+        private ConflictObjectResult SeasonDeleteConflict(IReadOnlyCollection<string> dependencies)
+        {
+            var error = dependencies.Count == 0
+                ? "Season cannot be deleted because dependent data exists."
+                : $"Season cannot be deleted because it is referenced by: {string.Join(", ", dependencies)}.";
+
+            return Conflict(new
+            {
+                error,
+                dependencies
+            });
         }
     }
 

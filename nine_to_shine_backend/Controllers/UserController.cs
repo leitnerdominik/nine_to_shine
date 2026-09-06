@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using System.ComponentModel.DataAnnotations;
 
 namespace NineToShineApi.Controllers
@@ -87,9 +88,54 @@ namespace NineToShineApi.Controllers
             var entity = await _db.Users.FirstOrDefaultAsync(x => x.Id == id, ct);
             if (entity == null) return NotFound();
 
+            var dependencies = await GetDeleteDependencies(id, ct);
+
+            if (dependencies.Count > 0)
+                return UserDeleteConflict(dependencies);
+
             _db.Users.Remove(entity);
-            await _db.SaveChangesAsync(ct);
+            try
+            {
+                await _db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException exception) when (
+                exception.InnerException is PostgresException
+                {
+                    SqlState: PostgresErrorCodes.ForeignKeyViolation
+                })
+            {
+                return UserDeleteConflict(await GetDeleteDependencies(id, ct));
+            }
+
             return NoContent();
+        }
+
+        private async Task<List<string>> GetDeleteDependencies(long id, CancellationToken ct)
+        {
+            var dependencies = new List<string>();
+            if (await _db.Game.AnyAsync(x => x.OrganizedByUserId == id, ct))
+                dependencies.Add("games");
+            if (await _db.Rankings.AnyAsync(x => x.UserId == id, ct))
+                dependencies.Add("rankings");
+            if (await _db.OrganizerDuties.AnyAsync(x => x.UserId == id, ct))
+                dependencies.Add("organizer duties");
+            if (await _db.OrganizerRotationMembers.AnyAsync(x => x.UserId == id, ct))
+                dependencies.Add("organizer rotation members");
+
+            return dependencies;
+        }
+
+        private ConflictObjectResult UserDeleteConflict(IReadOnlyCollection<string> dependencies)
+        {
+            var error = dependencies.Count == 0
+                ? "User cannot be deleted because dependent data exists."
+                : $"User cannot be deleted because it is referenced by: {string.Join(", ", dependencies)}.";
+
+            return Conflict(new
+            {
+                error,
+                dependencies
+            });
         }
     }
 

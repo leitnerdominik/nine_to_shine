@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using NineToShineApi.Controllers;
@@ -134,5 +135,164 @@ public sealed class UserSeasonGameTests : IntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         var rankingCount = await WithDbContextAsync(db => db.Rankings.CountAsync());
         rankingCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Deleting_referenced_user_conflicts_and_preserves_dependent_data()
+    {
+        var user = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, user);
+        await SeedAsync(user, season, game);
+
+        var ranking = TestRanking(game.Id, user.Id, 5);
+        var duty = new OrganizerDuty
+        {
+            DutyDate = new DateTime(2026, 6, 16),
+            UserId = user.Id,
+            SeasonId = season.Id
+        };
+        var rotationMember = new OrganizerRotationMember
+        {
+            UserId = user.Id,
+            SeasonId = season.Id,
+            SortOrder = 0
+        };
+        await SeedAsync(ranking, duty, rotationMember);
+
+        var response = await Client.DeleteAsync($"/api/user/{user.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+        payload.GetProperty("error").GetString().Should()
+            .Be("User cannot be deleted because it is referenced by: games, rankings, organizer duties, organizer rotation members.");
+        payload.GetProperty("dependencies").EnumerateArray().Select(x => x.GetString()).Should()
+            .BeEquivalentTo("games", "rankings", "organizer duties", "organizer rotation members");
+
+        var counts = await WithDbContextAsync(async db => new
+        {
+            Users = await db.Users.CountAsync(),
+            Games = await db.Game.CountAsync(),
+            Rankings = await db.Rankings.CountAsync(),
+            Duties = await db.OrganizerDuties.CountAsync(),
+            RotationMembers = await db.OrganizerRotationMembers.CountAsync()
+        });
+        counts.Should().BeEquivalentTo(new
+        {
+            Users = 1,
+            Games = 1,
+            Rankings = 1,
+            Duties = 1,
+            RotationMembers = 1
+        });
+    }
+
+    [Fact]
+    public async Task Deleting_referenced_season_conflicts_and_preserves_dependent_data()
+    {
+        var user = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, user);
+        await SeedAsync(user, season, game);
+
+        var ranking = TestRanking(game.Id, user.Id, 5);
+        var duty = new OrganizerDuty
+        {
+            DutyDate = new DateTime(2026, 6, 16),
+            UserId = user.Id,
+            SeasonId = season.Id
+        };
+        var rotationMember = new OrganizerRotationMember
+        {
+            UserId = user.Id,
+            SeasonId = season.Id,
+            SortOrder = 0
+        };
+        await SeedAsync(ranking, duty, rotationMember);
+
+        var response = await Client.DeleteAsync($"/api/season/{season.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>();
+        payload.GetProperty("error").GetString().Should()
+            .Be("Season cannot be deleted because it is referenced by: games, organizer duties.");
+        payload.GetProperty("dependencies").EnumerateArray().Select(x => x.GetString()).Should()
+            .BeEquivalentTo("games", "organizer duties");
+
+        var counts = await WithDbContextAsync(async db => new
+        {
+            Seasons = await db.Season.CountAsync(),
+            Games = await db.Game.CountAsync(),
+            Rankings = await db.Rankings.CountAsync(),
+            Duties = await db.OrganizerDuties.CountAsync(),
+            RotationMembers = await db.OrganizerRotationMembers.CountAsync()
+        });
+        counts.Should().BeEquivalentTo(new
+        {
+            Seasons = 1,
+            Games = 1,
+            Rankings = 1,
+            Duties = 1,
+            RotationMembers = 1
+        });
+    }
+
+    [Fact]
+    public async Task Deleting_principals_applies_configured_non_restrict_behaviors()
+    {
+        var user = TestUser();
+        var season = TestSeason();
+        await SeedAsync(user, season);
+
+        var rotationMember = new OrganizerRotationMember
+        {
+            UserId = user.Id,
+            SeasonId = season.Id,
+            SortOrder = 0
+        };
+        var trip = new Trip
+        {
+            OccurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc),
+            Name = "Summer trip",
+            SeasonId = season.Id
+        };
+        var finance = TestFinance("income", 10, user: user, seasonId: season.Id);
+        await SeedAsync(rotationMember, trip, finance);
+
+        var seasonResponse = await Client.DeleteAsync($"/api/season/{season.Id}");
+
+        seasonResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var afterSeasonDelete = await WithDbContextAsync(async db => new
+        {
+            Seasons = await db.Season.CountAsync(),
+            RotationMembers = await db.OrganizerRotationMembers.CountAsync(),
+            TripSeasonId = await db.Trips.Select(x => x.SeasonId).SingleAsync(),
+            FinanceSeasonId = await db.Finance.Select(x => x.SeasonId).SingleAsync(),
+            FinanceUserId = await db.Finance.Select(x => x.UserId).SingleAsync()
+        });
+        afterSeasonDelete.Should().BeEquivalentTo(new
+        {
+            Seasons = 0,
+            RotationMembers = 0,
+            TripSeasonId = (long?)null,
+            FinanceSeasonId = (long?)null,
+            FinanceUserId = (long?)user.Id
+        });
+
+        var userResponse = await Client.DeleteAsync($"/api/user/{user.Id}");
+
+        userResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var afterUserDelete = await WithDbContextAsync(async db => new
+        {
+            Users = await db.Users.CountAsync(),
+            FinanceRows = await db.Finance.CountAsync(),
+            FinanceUserId = await db.Finance.Select(x => x.UserId).SingleAsync()
+        });
+        afterUserDelete.Should().BeEquivalentTo(new
+        {
+            Users = 0,
+            FinanceRows = 1,
+            FinanceUserId = (long?)null
+        });
     }
 }
