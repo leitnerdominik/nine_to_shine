@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   getUsers: vi.fn(),
   getTrip: vi.fn(),
+  replaceSplit: vi.fn(),
   replaceSplitsBatch: vi.fn(),
   removeTrip: vi.fn(),
 }));
@@ -32,6 +33,7 @@ vi.mock('@/definitions/commands', () => ({
   apiUsers: { getAll: mocks.getUsers },
   apiTrips: {
     getById: mocks.getTrip,
+    replaceSplit: mocks.replaceSplit,
     replaceSplitsBatch: mocks.replaceSplitsBatch,
     remove: mocks.removeTrip,
   },
@@ -127,6 +129,7 @@ describe('TripDetailsPage trip setup', () => {
       seasonId: 3,
       transactions: finances,
     });
+    mocks.replaceSplit.mockResolvedValue([]);
     mocks.replaceSplitsBatch.mockResolvedValue([]);
     mocks.removeTrip.mockResolvedValue(undefined);
   });
@@ -197,6 +200,90 @@ describe('TripDetailsPage trip setup', () => {
       screen.getByRole('spinbutton', { name: 'Grundkosten gesamt' })
     ).toHaveValue(10);
     expect(mocks.getTrip).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves conflict and unsaved trip setup when reload fails', async () => {
+    const browser = userEvent.setup();
+    mocks.replaceSplitsBatch.mockRejectedValueOnce({ status: 409 });
+    renderWithProviders(
+      <TripDetailsPage params={Promise.resolve({ tripId: occurredAt })} />
+    );
+
+    const setupSection = (await screen.findByText('Grundkosten & Teilnehmer'))
+      .closest('.MuiPaper-root')!;
+    await browser.click(
+      within(setupSection).getByRole('button', { name: 'Bearbeiten' })
+    );
+    const baseAmount = within(setupSection).getByRole('spinbutton', {
+      name: 'Grundkosten gesamt',
+    });
+    await browser.clear(baseAmount);
+    await browser.type(baseAmount, '17.50');
+    await browser.click(
+      within(setupSection).getByRole('button', { name: 'Speichern' })
+    );
+
+    await screen.findByText(
+      /Die Finanzdaten wurden inzwischen geändert/
+    );
+    mocks.getTrip.mockRejectedValueOnce(new Error('Reload failed'));
+    await browser.click(screen.getByRole('button', { name: 'Neu laden' }));
+
+    await waitFor(() => expect(mocks.getTrip).toHaveBeenCalledTimes(2));
+    expect(
+      screen.getByText(/Die Finanzdaten wurden inzwischen geändert/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('spinbutton', { name: 'Grundkosten gesamt' })
+    ).toHaveValue(17.5);
+  });
+
+  it('preserves conflict and unsaved booking edits when reload fails', async () => {
+    const browser = userEvent.setup();
+    mocks.replaceSplit.mockRejectedValueOnce({ status: 409 });
+    renderWithProviders(
+      <TripDetailsPage params={Promise.resolve({ tripId: occurredAt })} />
+    );
+
+    const bookingsSection = (
+      await screen.findByRole('heading', { name: 'Weitere Buchungen' })
+    ).closest('.MuiPaper-root')!;
+    await browser.click(
+      within(bookingsSection).getByRole('button', { name: 'Bearbeiten' })
+    );
+    const bookingAmount = within(bookingsSection).getByRole('spinbutton', {
+      name: 'Betrag',
+    });
+    const bookingDescription = within(bookingsSection).getByRole('textbox', {
+      name: 'Beschreibung',
+    });
+    await browser.clear(bookingAmount);
+    await browser.type(bookingAmount, '7.50');
+    await browser.clear(bookingDescription);
+    await browser.type(bookingDescription, 'Museum mit Führung');
+    await browser.click(
+      within(bookingsSection).getByRole('button', { name: 'Speichern' })
+    );
+
+    await screen.findByText(/Die Finanzdaten wurden inzwischen geändert/);
+    mocks.getTrip.mockRejectedValueOnce(new Error('Reload failed'));
+    await browser.click(screen.getByRole('button', { name: 'Neu laden' }));
+
+    await waitFor(() => expect(mocks.getTrip).toHaveBeenCalledTimes(2));
+    expect(
+      screen.getByText(/Die Finanzdaten wurden inzwischen geändert/)
+    ).toBeInTheDocument();
+    const reloadedBookingsSection = screen
+      .getByRole('heading', { name: 'Weitere Buchungen' })
+      .closest('.MuiPaper-root')!;
+    expect(
+      within(reloadedBookingsSection).getByRole('spinbutton', { name: 'Betrag' })
+    ).toHaveValue(7.5);
+    expect(
+      within(reloadedBookingsSection).getByRole('textbox', {
+        name: 'Beschreibung',
+      })
+    ).toHaveValue('Museum mit Führung');
   });
 
   it('creates a missing base split in the same batch as existing bookings', async () => {

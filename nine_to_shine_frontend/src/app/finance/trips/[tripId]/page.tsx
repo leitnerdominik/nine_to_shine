@@ -289,8 +289,10 @@ export default function TripDetailsPage({
           .filter((participant) => participant.isOnTrip)
           .map((participant) => participant.user.id)
       );
+      return true;
     } catch (err) {
       console.error(err);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -313,8 +315,10 @@ export default function TripDetailsPage({
   };
 
   const handleReloadAfterConflict = async () => {
+    const reloadSucceeded = await fetchTripDetails();
+    if (!reloadSucceeded) return;
+
     setConflictError(null);
-    await fetchTripDetails();
     setEditingBookingId(null);
     setIsEditingTripSetup(false);
     setEditAmount('');
