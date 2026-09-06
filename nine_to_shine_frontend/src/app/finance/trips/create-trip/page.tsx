@@ -21,7 +21,7 @@ import { useRouter } from 'next/navigation';
 
 import Layout from '@/components/Layout';
 import CustomTitle from '@/components/CustomTitle';
-import { apiFinance, apiUsers, apiSeason } from '@/definitions/commands';
+import { apiTrips, apiUsers, apiSeason } from '@/definitions/commands';
 import type { UserDto, SeasonDto } from '@/definitions/types';
 
 // Importieren der ausgelagerten Teile
@@ -144,8 +144,9 @@ export default function TripExpensesPage() {
     }
 
     try {
-      await apiFinance.createTripSplit({
+      await apiTrips.create({
         occurredAt: new Date(data.globalDate).toISOString(),
+        name: baseDescText,
         direction: 'expense',
         amount: calculation.baseTotal,
         description: fullBaseDesc,

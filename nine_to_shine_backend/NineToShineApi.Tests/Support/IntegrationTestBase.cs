@@ -87,19 +87,30 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         DateTime? occurredAt = null,
         User? user = null,
         long? seasonId = null,
-        Game? game = null)
+        Game? game = null,
+        Trip? trip = null)
     {
+        var financeOccurredAt = occurredAt ?? new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
         return new Finance
         {
             Direction = direction,
             Amount = amount,
             Category = category,
-            OccurredAt = occurredAt ?? new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc),
+            OccurredAt = financeOccurredAt,
             User = user is { Id: 0 } ? user : null,
             UserId = user is { Id: > 0 } ? user.Id : null,
             SeasonId = seasonId,
             Game = game is { Id: 0 } ? game : null,
-            GameId = game is { Id: > 0 } ? game.Id : null
+            GameId = game is { Id: > 0 } ? game.Id : null,
+            Trip = category == "TRIP" && trip is not { Id: > 0 }
+                ? trip ?? new Trip
+                {
+                    OccurredAt = financeOccurredAt,
+                    Name = "Test trip",
+                    SeasonId = seasonId
+                }
+                : null,
+            TripId = trip is { Id: > 0 } ? trip.Id : null
         };
     }
 

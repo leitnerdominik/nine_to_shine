@@ -9,64 +9,19 @@ import Layout from '@/components/Layout';
 import CustomTitle from '@/components/CustomTitle';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import TripCard from '@/components/TripCard';
-import { apiFinance } from '@/definitions/commands';
-import type { FinanceDto } from '@/definitions/types';
-
-interface TripGroup {
-  id: string;
-  date: Date;
-  description: string;
-  totalAmount: number;
-}
+import { apiTrips } from '@/definitions/commands';
+import type { TripSummaryDto } from '@/definitions/types';
 
 export default function TripHistoryPage() {
   const [loading, setLoading] = useState(true);
-  const [trips, setTrips] = useState<TripGroup[]>([]);
+  const [trips, setTrips] = useState<TripSummaryDto[]>([]);
 
   const router = useRouter();
 
   useEffect(() => {
     (async () => {
       try {
-        const transactions = await apiFinance.getAll();
-
-        const tripTransactions = transactions.filter(
-          (t) => t.category === 'TRIP'
-        );
-
-        const groups: Record<string, FinanceDto[]> = {};
-
-        tripTransactions.forEach((tx) => {
-          const key = tx.occurredAt;
-          if (!groups[key]) groups[key] = [];
-          groups[key].push(tx);
-        });
-
-        const processedTrips: TripGroup[] = Object.keys(groups).map((key) => {
-          const txList = groups[key];
-          const firstTx = txList[0];
-          const date = new Date(firstTx.occurredAt);
-
-          const description = (firstTx.description || 'Unbenannter Trip')
-            .replace(/\s?\((Anreise\/Unterkunft|Aktivität)\)/g, '')
-            .replace(/\s?\(Aktivität.*?\)/g, '')
-            .replace(/\s?\((Ausgabe|Einnahme).*?\)/g, '')
-            .trim();
-
-          return {
-            id: key,
-            date,
-            description,
-            totalAmount: txList.reduce(
-              (sum, t) =>
-                sum + (t.direction === 'expense' ? t.amount : -t.amount),
-              0
-            ),
-          };
-        });
-
-        processedTrips.sort((a, b) => b.date.getTime() - a.date.getTime());
-        setTrips(processedTrips);
+        setTrips(await apiTrips.getAll());
       } catch (err) {
         console.error(err);
       } finally {
@@ -105,12 +60,10 @@ export default function TripHistoryPage() {
             trips.map((trip) => (
               <TripCard
                 key={trip.id}
-                date={trip.date}
-                description={trip.description}
+                date={new Date(trip.occurredAt)}
+                description={trip.name}
                 totalAmount={trip.totalAmount}
-                onClick={() =>
-                  router.push(`/finance/trips/${encodeURIComponent(trip.id)}`)
-                }
+                onClick={() => router.push(`/finance/trips/${trip.id}`)}
               />
             ))
           )}

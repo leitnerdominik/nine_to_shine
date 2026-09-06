@@ -6,19 +6,21 @@ import { renderWithProviders } from '@/test/test-utils';
 import TripDetailsPage from './page';
 
 const occurredAt = '2026-06-16T12:00:00.000Z';
+const tripId = 42;
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   getUsers: vi.fn(),
-  getFinances: vi.fn(),
-  replaceTripSplitsBatch: vi.fn(),
+  getTrip: vi.fn(),
+  replaceSplitsBatch: vi.fn(),
+  removeTrip: vi.fn(),
 }));
 
 vi.mock('react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react')>();
   return {
     ...actual,
-    use: () => ({ tripId: encodeURIComponent(occurredAt) }),
+    use: () => ({ tripId: String(tripId) }),
   };
 });
 
@@ -28,9 +30,10 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/definitions/commands', () => ({
   apiUsers: { getAll: mocks.getUsers },
-  apiFinance: {
-    getAll: mocks.getFinances,
-    replaceTripSplitsBatch: mocks.replaceTripSplitsBatch,
+  apiTrips: {
+    getById: mocks.getTrip,
+    replaceSplitsBatch: mocks.replaceSplitsBatch,
+    remove: mocks.removeTrip,
   },
 }));
 
@@ -117,8 +120,15 @@ describe('TripDetailsPage trip setup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getUsers.mockResolvedValue(users);
-    mocks.getFinances.mockResolvedValue(finances);
-    mocks.replaceTripSplitsBatch.mockResolvedValue([]);
+    mocks.getTrip.mockResolvedValue({
+      id: tripId,
+      name: 'Urlaub',
+      occurredAt,
+      seasonId: 3,
+      transactions: finances,
+    });
+    mocks.replaceSplitsBatch.mockResolvedValue([]);
+    mocks.removeTrip.mockResolvedValue(undefined);
   });
 
   it('sends the base and additional bookings in one batch request', async () => {
@@ -137,9 +147,7 @@ describe('TripDetailsPage trip setup', () => {
     );
 
     await waitFor(() =>
-      expect(mocks.replaceTripSplitsBatch).toHaveBeenCalledWith({
-        occurredAt,
-        seasonId: 3,
+      expect(mocks.replaceSplitsBatch).toHaveBeenCalledWith(tripId, {
         userIds: [2, 1],
         splits: [
           {
@@ -163,12 +171,12 @@ describe('TripDetailsPage trip setup', () => {
         ],
       })
     );
-    expect(mocks.replaceTripSplitsBatch).toHaveBeenCalledTimes(1);
+    expect(mocks.replaceSplitsBatch).toHaveBeenCalledTimes(1);
   });
 
   it('keeps trip setup editing active after a conflict', async () => {
     const browser = userEvent.setup();
-    mocks.replaceTripSplitsBatch.mockRejectedValueOnce({ status: 409 });
+    mocks.replaceSplitsBatch.mockRejectedValueOnce({ status: 409 });
     renderWithProviders(
       <TripDetailsPage params={Promise.resolve({ tripId: occurredAt })} />
     );
@@ -188,12 +196,18 @@ describe('TripDetailsPage trip setup', () => {
     expect(
       screen.getByRole('spinbutton', { name: 'Grundkosten gesamt' })
     ).toHaveValue(10);
-    expect(mocks.getFinances).toHaveBeenCalledTimes(1);
+    expect(mocks.getTrip).toHaveBeenCalledTimes(1);
   });
 
   it('creates a missing base split in the same batch as existing bookings', async () => {
     const browser = userEvent.setup();
-    mocks.getFinances.mockResolvedValue(finances.slice(2));
+    mocks.getTrip.mockResolvedValue({
+      id: tripId,
+      name: 'Urlaub',
+      occurredAt,
+      seasonId: 3,
+      transactions: finances.slice(2),
+    });
     renderWithProviders(
       <TripDetailsPage params={Promise.resolve({ tripId: occurredAt })} />
     );
@@ -216,7 +230,8 @@ describe('TripDetailsPage trip setup', () => {
     );
 
     await waitFor(() =>
-      expect(mocks.replaceTripSplitsBatch).toHaveBeenCalledWith(
+      expect(mocks.replaceSplitsBatch).toHaveBeenCalledWith(
+        tripId,
         expect.objectContaining({
           userIds: [2, 1],
           splits: [
@@ -236,5 +251,41 @@ describe('TripDetailsPage trip setup', () => {
         })
       )
     );
+  });
+
+  it('deletes the selected trip by id with its complete version snapshot', async () => {
+    const browser = userEvent.setup();
+    renderWithProviders(
+      <TripDetailsPage params={Promise.resolve({ tripId: String(tripId) })} />
+    );
+
+    await screen.findByText('Grundkosten & Teilnehmer');
+    await browser.click(screen.getAllByRole('button', { name: 'Löschen' })[0]);
+    await browser.click(screen.getAllByRole('button', { name: 'Löschen' }).at(-1)!);
+
+    await waitFor(() =>
+      expect(mocks.removeTrip).toHaveBeenCalledWith(
+        tripId,
+        finances.map(({ id, updatedAt }) => ({ id, updatedAt }))
+      )
+    );
+    expect(mocks.push).toHaveBeenCalledWith('/finance/trips');
+  });
+
+  it('keeps the user on the trip when deletion conflicts', async () => {
+    const browser = userEvent.setup();
+    mocks.removeTrip.mockRejectedValueOnce({ status: 409 });
+    renderWithProviders(
+      <TripDetailsPage params={Promise.resolve({ tripId: String(tripId) })} />
+    );
+
+    await screen.findByText('Grundkosten & Teilnehmer');
+    await browser.click(screen.getAllByRole('button', { name: 'Löschen' })[0]);
+    await browser.click(screen.getAllByRole('button', { name: 'Löschen' }).at(-1)!);
+
+    expect(
+      await screen.findByText(/Die Finanzdaten wurden inzwischen geändert/)
+    ).toBeInTheDocument();
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 });

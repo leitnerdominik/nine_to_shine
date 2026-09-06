@@ -118,6 +118,7 @@ export interface FinanceDto {
   seasonId?: number;
   gameId?: number;
   gameName?: string;
+  tripId?: number | null;
 }
 
 export interface UnpaidDuesMemberDto {
@@ -196,22 +197,24 @@ export interface CreateExpenseBatchRequest {
   }[];
 }
 
-export interface CreateTripSplitRequest {
-  occurredAt?: string;
+export interface TripSplitRequest {
   direction: 'income' | 'expense';
   amount: number;
   description?: string;
-  seasonId?: number;
   userIds: number[];
 }
 
-export interface ReplaceTripSplitRequest extends CreateTripSplitRequest {
+export interface CreateTripRequest extends TripSplitRequest {
+  occurredAt: string;
+  name: string;
+  seasonId: number;
+}
+
+export interface ReplaceTripSplitRequest extends TripSplitRequest {
   transactions: FinanceVersionReference[];
 }
 
 export interface ReplaceTripSplitsBatchRequest {
-  occurredAt: string;
-  seasonId?: number;
   userIds: number[];
   splits: {
     transactions: FinanceVersionReference[];
@@ -219,6 +222,22 @@ export interface ReplaceTripSplitsBatchRequest {
     amount: number;
     description?: string;
   }[];
+}
+
+export interface TripSummaryDto {
+  id: number;
+  name: string;
+  occurredAt: string;
+  seasonId: number | null;
+  totalAmount: number;
+}
+
+export interface TripDetailsDto {
+  id: number;
+  name: string;
+  occurredAt: string;
+  seasonId: number | null;
+  transactions: FinanceDto[];
 }
 
 export interface TopRankedDto {

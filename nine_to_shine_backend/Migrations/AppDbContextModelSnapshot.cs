@@ -59,6 +59,10 @@ namespace NineToShineApi.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("season_id");
 
+                    b.Property<long?>("TripId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("trip_id");
+
                     b.Property<long?>("UserId")
                         .HasColumnType("bigint")
                         .HasColumnName("user_id");
@@ -82,6 +86,8 @@ namespace NineToShineApi.Migrations
 
                     b.HasIndex("SeasonId");
 
+                    b.HasIndex("TripId");
+
                     b.HasIndex("UserId");
 
                     b.ToTable("finance", null, t =>
@@ -89,6 +95,8 @@ namespace NineToShineApi.Migrations
                             t.HasCheckConstraint("ck_finance_amount_pos", "amount > 0");
 
                             t.HasCheckConstraint("ck_finance_direction", "direction IN ('income','expense')");
+
+                            t.HasCheckConstraint("ck_finance_trip_link", "(category = 'TRIP' AND trip_id IS NOT NULL) OR (category <> 'TRIP' AND trip_id IS NULL)");
                         });
                 });
 
@@ -309,6 +317,38 @@ namespace NineToShineApi.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("NineToShineApi.Models.Trip", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<long?>("SeasonId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("season_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAt");
+
+                    b.HasIndex("SeasonId");
+
+                    b.ToTable("trip", (string)null);
+                });
+
             modelBuilder.Entity("NineToShineApi.Models.Finance", b =>
                 {
                     b.HasOne("NineToShineApi.Models.Game", "Game")
@@ -321,12 +361,19 @@ namespace NineToShineApi.Migrations
                         .HasForeignKey("SeasonId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("NineToShineApi.Models.Trip", "Trip")
+                        .WithMany("Transactions")
+                        .HasForeignKey("TripId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("NineToShineApi.Models.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Game");
+
+                    b.Navigation("Trip");
 
                     b.Navigation("User");
                 });
@@ -411,6 +458,18 @@ namespace NineToShineApi.Migrations
             modelBuilder.Entity("NineToShineApi.Models.User", b =>
                 {
                     b.Navigation("OrganizedGames");
+                });
+
+            modelBuilder.Entity("NineToShineApi.Models.Trip", b =>
+                {
+                    b.HasOne("NineToShineApi.Models.Season", "Season")
+                        .WithMany()
+                        .HasForeignKey("SeasonId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Season");
+
+                    b.Navigation("Transactions");
                 });
 #pragma warning restore 612, 618
         }

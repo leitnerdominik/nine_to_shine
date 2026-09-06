@@ -61,7 +61,7 @@ namespace NineToShineApi.Controllers
                     f.Id, f.OccurredAt, f.Direction, f.Amount, f.Category, f.Description,
                     f.UserId, f.User != null ? f.User.DisplayName : null,
                     f.SeasonId, f.GameId, f.Game != null ? f.Game.GameName : null,
-                    f.UpdatedAt
+                    f.TripId, f.UpdatedAt
                 ))
                 .ToListAsync(ct);
 
@@ -247,6 +247,7 @@ namespace NineToShineApi.Controllers
                 f.SeasonId,
                 f.GameId,
                 f.Game?.GameName,
+                f.TripId,
                 f.UpdatedAt
             ));
         }
@@ -285,12 +286,16 @@ namespace NineToShineApi.Controllers
                 if (!gameExists) return BadRequest(new { error = "game_id not found." });
             }
 
+            var category = body.Category.ToUpperInvariant();
+            if (category == "TRIP")
+                return BadRequest(new { error = "TRIP transactions must be created through the trips API." });
+
             var entity = new Finance
             {
                 OccurredAt = body.OccurredAt ?? DateTime.UtcNow,
                 Direction = dir,
                 Amount = body.Amount,
-                Category = body.Category.ToUpperInvariant(), // z.B. "PIZZA", "DUES"
+                Category = category, // z.B. "PIZZA", "DUES"
                 Description = body.Description,
                 UserId = body.UserId,
                 SeasonId = body.SeasonId,
@@ -330,6 +335,7 @@ namespace NineToShineApi.Controllers
                 entity.SeasonId,
                 entity.GameId,
                 gameName,
+                entity.TripId,
                 entity.UpdatedAt
             );
 
@@ -444,6 +450,9 @@ namespace NineToShineApi.Controllers
             var entity = await _db.Finance.FindAsync(new object[] { id }, ct);
             if (entity is null) return NotFound();
 
+            if (entity.TripId.HasValue || body.Category.Equals("TRIP", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { error = "Trip transactions must be changed through the trips API." });
+
             if (!body.UpdatedAt.HasValue ||
                 !MatchesExpectedVersion(entity, body.UpdatedAt.Value))
             {
@@ -525,6 +534,7 @@ namespace NineToShineApi.Controllers
                 entity.SeasonId,
                 entity.GameId,
                 gameName,
+                entity.TripId,
                 entity.UpdatedAt
             ));
         }
@@ -539,6 +549,9 @@ namespace NineToShineApi.Controllers
             await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             var entity = await _db.Finance.FindAsync(new object[] { id }, ct);
             if (entity is null) return NotFound();
+
+            if (entity.TripId.HasValue)
+                return BadRequest(new { error = "Trip transactions must be deleted through the trips API." });
 
             if (!updatedAt.HasValue || !MatchesExpectedVersion(entity, updatedAt.Value))
                 return FinanceConflict();
@@ -576,6 +589,9 @@ namespace NineToShineApi.Controllers
                 .ToListAsync(ct);
 
             if (!VersionsMatch(rows, body.Transactions)) return FinanceConflict();
+
+            if (rows.Any(finance => finance.TripId.HasValue))
+                return BadRequest(new { error = "Trip transactions must be deleted through the trips API." });
 
             try
             {
@@ -616,6 +632,14 @@ namespace NineToShineApi.Controllers
             }
 
             if (!VersionsMatch(transactions, body.Transactions)) return FinanceConflict();
+
+            if (transactions.Any(finance => finance.TripId.HasValue))
+            {
+                return BadRequest(new
+                {
+                    error = "Trip transactions must be deleted through the trips API."
+                });
+            }
 
             try
             {
@@ -712,267 +736,6 @@ namespace NineToShineApi.Controllers
 
             return Ok(await GetFinanceDtos(created.Select(finance => finance.Id).ToList(), ct));
         }
-
-        // DELETE: api/finance/trip/by-date?date=2023-01-01
-        // Löscht alle TRIP-Transaktionen eines bestimmten Tages
-        [HttpDelete("trip/by-date")]
-        public async Task<IActionResult> DeleteTripsByDate(
-            [FromQuery] DateTime date,
-            [FromBody] FinanceVersionReferencesRequest body,
-            CancellationToken ct)
-        {
-            if (!ModelState.IsValid) return ValidationProblem(ModelState);
-
-            var duplicateError = ValidateVersionReferences(body.Transactions);
-            if (duplicateError is not null) return duplicateError;
-
-            var start = date.Date;
-            var end = start.AddDays(1);
-
-            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
-            var transactions = await _db.Finance
-                .Where(f => f.Category == "TRIP" && f.OccurredAt >= start && f.OccurredAt < end)
-                .ToListAsync(ct);
-
-            if (!transactions.Any())
-            {
-                return NotFound();
-            }
-
-            if (!VersionsMatch(transactions, body.Transactions)) return FinanceConflict();
-
-            try
-            {
-                _db.Finance.RemoveRange(transactions);
-                await _db.SaveChangesAsync(ct);
-                await transaction.CommitAsync(ct);
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                await transaction.RollbackAsync(ct);
-                return FinanceConflict();
-            }
-
-            return NoContent();
-        }
-
-        // POST: api/finance/trip/split
-        // Erstellt TRIP-Buchungen und verteilt Cent-Reste deterministisch auf die niedrigsten User-IDs.
-        [HttpPost("trip/split")]
-        public async Task<ActionResult<IEnumerable<FinanceDto>>> CreateTripSplit(
-            [FromBody] CreateTripSplitRequest body,
-            CancellationToken ct)
-        {
-            if (!ModelState.IsValid) return ValidationProblem(ModelState);
-
-            var validationResult = await ValidateTripSplitRequest(body, ct);
-            if (validationResult is not null) return validationResult;
-
-            var created = CreateTripSplitRows(body);
-            await _db.SaveChangesAsync(ct);
-            var createdDtos = await GetFinanceDtos(created.Select(f => f.Id).ToList(), ct);
-
-            return Ok(createdDtos);
-        }
-
-        // POST: api/finance/trip/split/replace
-        // Ersetzt vorhandene TRIP-Buchungen atomar durch neu gesplittete Buchungen.
-        [HttpPost("trip/split/replace")]
-        public async Task<ActionResult<IEnumerable<FinanceDto>>> ReplaceTripSplit(
-            [FromBody] ReplaceTripSplitRequest body,
-            CancellationToken ct)
-        {
-            if (!ModelState.IsValid) return ValidationProblem(ModelState);
-
-            if (body.Transactions.Count == 0)
-                return BadRequest(new { error = "transactions must contain at least one transaction." });
-
-            var validationResult = await ValidateTripSplitRequest(body, ct);
-            if (validationResult is not null) return validationResult;
-
-            var duplicateError = ValidateVersionReferences(body.Transactions);
-            if (duplicateError is not null) return duplicateError;
-
-            var transactionIds = body.Transactions
-                .Select(reference => reference.Id)
-                .ToList();
-
-            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
-            var existingTransactions = await _db.Finance
-                .Where(f => transactionIds.Contains(f.Id))
-                .ToListAsync(ct);
-
-            if (!VersionsMatch(existingTransactions, body.Transactions))
-                return FinanceConflict();
-
-            if (existingTransactions.Any(f => f.Category != "TRIP"))
-                return BadRequest(new { error = "Only TRIP transactions can be replaced by this endpoint." });
-
-            var created = CreateTripSplitRows(body);
-            try
-            {
-                _db.Finance.RemoveRange(existingTransactions);
-                await _db.SaveChangesAsync(ct);
-                await transaction.CommitAsync(ct);
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                await transaction.RollbackAsync(ct);
-                return FinanceConflict();
-            }
-
-            var createdDtos = await GetFinanceDtos(created.Select(f => f.Id).ToList(), ct);
-
-            return Ok(createdDtos);
-        }
-
-        // POST: api/finance/trip/splits/batch-replace
-        // Erstellt und ersetzt mehrere TRIP-Buchungen in einer Transaktion.
-        [HttpPost("trip/splits/batch-replace")]
-        public async Task<ActionResult<IEnumerable<FinanceDto>>> ReplaceTripSplitsBatch(
-            [FromBody] ReplaceTripSplitsBatchRequest body,
-            CancellationToken ct)
-        {
-            if (!ModelState.IsValid) return ValidationProblem(ModelState);
-
-            if (!body.OccurredAt.HasValue)
-                return BadRequest(new { error = "occurredAt is required." });
-
-            foreach (var split in body.Splits)
-            {
-                var splitRequest = ToTripSplitRequest(body, split);
-                var validationResult = await ValidateTripSplitRequest(splitRequest, ct);
-                if (validationResult is not null) return validationResult;
-            }
-
-            var versionReferences = body.Splits
-                .SelectMany(split => split.Transactions)
-                .ToList();
-            var duplicateError = ValidateVersionReferences(versionReferences);
-            if (duplicateError is not null) return duplicateError;
-
-            var transactionIds = versionReferences
-                .Select(reference => reference.Id)
-                .ToList();
-
-            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
-            var existingTransactions = transactionIds.Count == 0
-                ? []
-                : await _db.Finance
-                    .Where(finance => transactionIds.Contains(finance.Id))
-                    .ToListAsync(ct);
-
-            if (!VersionsMatch(existingTransactions, versionReferences))
-                return FinanceConflict();
-
-            if (existingTransactions.Any(finance =>
-                    finance.Category != "TRIP" ||
-                    finance.OccurredAt != body.OccurredAt.Value))
-            {
-                return BadRequest(new
-                {
-                    error = "Only TRIP transactions from the supplied occurredAt can be replaced."
-                });
-            }
-
-            var created = new List<Finance>();
-            foreach (var split in body.Splits)
-                created.AddRange(CreateTripSplitRows(ToTripSplitRequest(body, split)));
-
-            try
-            {
-                if (existingTransactions.Count > 0)
-                    _db.Finance.RemoveRange(existingTransactions);
-
-                await _db.SaveChangesAsync(ct);
-                await transaction.CommitAsync(ct);
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                await transaction.RollbackAsync(ct);
-                return FinanceConflict();
-            }
-
-            return Ok(await GetFinanceDtos(created.Select(finance => finance.Id).ToList(), ct));
-        }
-
-        private async Task<ActionResult<IEnumerable<FinanceDto>>?> ValidateTripSplitRequest(
-            CreateTripSplitRequest body,
-            CancellationToken ct)
-        {
-            var dir = body.Direction.ToLowerInvariant();
-            if (dir != "income" && dir != "expense")
-                return BadRequest(new { error = "Direction must be 'income' or 'expense'." });
-
-            if (body.Amount <= 0)
-                return BadRequest(new { error = "Amount must be greater than 0." });
-
-            if (body.Amount != decimal.Round(body.Amount, 2))
-                return BadRequest(new { error = "Amount must not have more than two decimal places." });
-
-            if (body.UserIds.Count == 0)
-                return BadRequest(new { error = "userIds must contain at least one user." });
-
-            var userIds = body.UserIds.Distinct().ToList();
-            if (userIds.Count != body.UserIds.Count)
-                return BadRequest(new { error = "userIds must not contain duplicates." });
-
-            var totalCents = decimal.ToInt64(body.Amount * 100m);
-            if (totalCents < userIds.Count)
-                return BadRequest(new { error = "Amount is too small to split across all selected users." });
-
-            var existingUserIds = await _db.Users
-                .Where(u => userIds.Contains(u.Id))
-                .Select(u => u.Id)
-                .ToListAsync(ct);
-
-            if (existingUserIds.Count != userIds.Count)
-                return BadRequest(new { error = "All userIds must refer to existing users." });
-
-            if (body.SeasonId.HasValue)
-            {
-                var seasonExists = await _db.Season.AnyAsync(s => s.Id == body.SeasonId, ct);
-                if (!seasonExists) return BadRequest(new { error = "season_id not found." });
-            }
-
-            return null;
-        }
-
-        private List<Finance> CreateTripSplitRows(CreateTripSplitRequest body)
-        {
-            var sharesByUserId = SplitAmountInCents(body.Amount, body.UserIds);
-            var direction = body.Direction.ToLowerInvariant();
-            var occurredAt = body.OccurredAt ?? DateTime.UtcNow;
-
-            var entities = sharesByUserId
-                .Select(entry => new Finance
-                {
-                    OccurredAt = occurredAt,
-                    Direction = direction,
-                    Amount = entry.Value,
-                    Category = "TRIP",
-                    Description = body.Description,
-                    UserId = entry.Key,
-                    SeasonId = body.SeasonId
-                })
-                .ToList();
-
-            _db.Finance.AddRange(entities);
-            return entities;
-        }
-
-        private static CreateTripSplitRequest ToTripSplitRequest(
-            ReplaceTripSplitsBatchRequest body,
-            TripSplitBatchEntryRequest split) =>
-            new()
-            {
-                OccurredAt = body.OccurredAt,
-                Direction = split.Direction,
-                Amount = split.Amount,
-                Description = split.Description,
-                SeasonId = body.SeasonId,
-                UserIds = body.UserIds
-            };
 
         private BadRequestObjectResult? ValidateDepositEntries(
             IReadOnlyCollection<GameDepositMemberRequest> members,
@@ -1104,6 +867,7 @@ namespace NineToShineApi.Controllers
                     f.SeasonId,
                     f.GameId,
                     f.Game != null ? f.Game.GameName : null,
+                    f.TripId,
                     f.UpdatedAt
                 ))
                 .ToListAsync(ct);
@@ -1147,24 +911,6 @@ namespace NineToShineApi.Controllers
                 error = "Finance data changed after it was loaded. Reload and try again."
             });
 
-        private static IReadOnlyDictionary<long, decimal> SplitAmountInCents(
-            decimal amount,
-            IEnumerable<long> userIds)
-        {
-            var sortedUserIds = userIds.OrderBy(id => id).ToList();
-            var totalCents = decimal.ToInt64(amount * 100m);
-            var baseShare = totalCents / sortedUserIds.Count;
-            var leftoverCents = totalCents % sortedUserIds.Count;
-
-            return sortedUserIds
-                .Select((userId, index) => new
-                {
-                    UserId = userId,
-                    Amount = (baseShare + (index < leftoverCents ? 1 : 0)) / 100m
-                })
-                .ToDictionary(entry => entry.UserId, entry => entry.Amount);
-        }
-
         private static bool IsValidMoneyAmount(decimal amount, bool allowZero)
         {
             var minimum = allowZero ? 0m : 0.01m;
@@ -1187,6 +933,7 @@ namespace NineToShineApi.Controllers
         long? SeasonId,
         long? GameId,
         string? GameName,
+        long? TripId,
         DateTime UpdatedAt
     );
 
@@ -1261,35 +1008,6 @@ namespace NineToShineApi.Controllers
         public long? GameId { get; set; }
     }
 
-    public class CreateTripSplitRequest
-    {
-        public DateTime? OccurredAt { get; set; }
-
-        [Required]
-        [RegularExpression("income|expense", ErrorMessage = "Direction must be 'income' or 'expense'")]
-        public string Direction { get; set; } = "expense";
-
-        [Required]
-        [Range(0.01, 1000000)]
-        public decimal Amount { get; set; }
-
-        public string? Description { get; set; }
-
-        [Display(Name = "season_id")]
-        public long? SeasonId { get; set; }
-
-        [Required]
-        [MinLength(1)]
-        public List<long> UserIds { get; set; } = [];
-    }
-
-    public class ReplaceTripSplitRequest : CreateTripSplitRequest
-    {
-        [Required]
-        [MinLength(1)]
-        public List<FinanceVersionReference> Transactions { get; set; } = [];
-    }
-
     public class ReplaceGameDepositsRequest
     {
         [Required]
@@ -1362,39 +1080,6 @@ namespace NineToShineApi.Controllers
 
     public class CreateExpenseBatchItemRequest
     {
-        [Range(0.01, 1000000)]
-        public decimal Amount { get; set; }
-
-        public string? Description { get; set; }
-    }
-
-    public class ReplaceTripSplitsBatchRequest
-    {
-        [Required]
-        public DateTime? OccurredAt { get; set; }
-
-        [Display(Name = "season_id")]
-        public long? SeasonId { get; set; }
-
-        [Required]
-        [MinLength(1)]
-        public List<long> UserIds { get; set; } = [];
-
-        [Required]
-        [MinLength(1)]
-        public List<TripSplitBatchEntryRequest> Splits { get; set; } = [];
-    }
-
-    public class TripSplitBatchEntryRequest
-    {
-        [Required]
-        public List<FinanceVersionReference> Transactions { get; set; } = [];
-
-        [Required]
-        [RegularExpression("income|expense", ErrorMessage = "Direction must be 'income' or 'expense'")]
-        public string Direction { get; set; } = "expense";
-
-        [Required]
         [Range(0.01, 1000000)]
         public decimal Amount { get; set; }
 

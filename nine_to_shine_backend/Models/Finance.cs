@@ -13,6 +13,8 @@
         public long? SeasonId { get; set; }
         public long? GameId { get; set; }
         public Game? Game { get; set; }
+        public long? TripId { get; set; }
+        public Trip? Trip { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
 }

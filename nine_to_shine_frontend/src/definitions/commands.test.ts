@@ -22,6 +22,7 @@ import {
   apiFinance,
   apiOrganizerDuty,
   apiRanking,
+  apiTrips,
   apiUsers,
 } from './commands';
 
@@ -146,28 +147,38 @@ describe('API command wrappers', () => {
     );
   });
 
-  it('uses the backend trip deletion route with an ISO date', async () => {
+  it('deletes a trip by its stable id', async () => {
     apiModule.api.delete.mockResolvedValueOnce({});
 
     const transactions = [
       { id: 10, updatedAt: '2026-06-15T13:00:00.000Z' },
     ];
-    await apiFinance.deleteTripsByDate(
-      new Date('2026-06-15T12:30:00.000Z'),
-      transactions
-    );
+    await apiTrips.remove(42, transactions);
 
     expect(apiModule.api.delete).toHaveBeenCalledWith(
-      '/finance/trip/by-date?date=2026-06-15T12:30:00.000Z',
+      '/trips/42',
       { data: { transactions } }
     );
   });
 
-  it('creates trip splits through the backend split endpoint', async () => {
-    apiModule.api.post.mockResolvedValueOnce({ data: [] });
+  it('loads trip summaries and details by id', async () => {
+    apiModule.api.get
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({ data: { id: 42 } });
+
+    await apiTrips.getAll();
+    await apiTrips.getById(42);
+
+    expect(apiModule.api.get).toHaveBeenNthCalledWith(1, '/trips');
+    expect(apiModule.api.get).toHaveBeenNthCalledWith(2, '/trips/42');
+  });
+
+  it('creates a trip through the aggregate endpoint', async () => {
+    apiModule.api.post.mockResolvedValueOnce({ data: {} });
 
     const payload = {
       occurredAt: '2026-06-15T12:30:00.000Z',
+      name: 'Urlaub',
       direction: 'expense' as const,
       amount: 10,
       description: 'Urlaub (Ausgabe)',
@@ -175,43 +186,47 @@ describe('API command wrappers', () => {
       userIds: [3, 2, 1],
     };
 
-    await apiFinance.createTripSplit(payload);
+    await apiTrips.create(payload);
 
-    expect(apiModule.api.post).toHaveBeenCalledWith(
-      '/finance/trip/split',
-      payload
-    );
+    expect(apiModule.api.post).toHaveBeenCalledWith('/trips', payload);
   });
 
   it('replaces trip splits through the backend replace endpoint', async () => {
-    apiModule.api.post.mockResolvedValueOnce({ data: [] });
+    apiModule.api.put.mockResolvedValueOnce({ data: [] });
 
     const payload = {
       transactions: [
         { id: 10, updatedAt: '2026-06-15T13:00:00.000Z' },
         { id: 11, updatedAt: '2026-06-15T13:00:01.000Z' },
       ],
-      occurredAt: '2026-06-15T12:30:00.000Z',
       direction: 'expense' as const,
       amount: 10,
       description: 'Urlaub (Ausgabe)',
-      seasonId: 4,
       userIds: [3, 2, 1],
     };
 
-    await apiFinance.replaceTripSplit(payload);
+    await apiTrips.replaceSplit(42, payload);
 
-    expect(apiModule.api.post).toHaveBeenCalledWith(
-      '/finance/trip/split/replace',
-      payload
-    );
+    expect(apiModule.api.put).toHaveBeenCalledWith('/trips/42/splits', payload);
+  });
+
+  it('adds a split to the selected trip', async () => {
+    apiModule.api.post.mockResolvedValueOnce({ data: [] });
+    const payload = {
+      direction: 'income' as const,
+      amount: 3,
+      description: 'Urlaub (Einnahme)',
+      userIds: [1, 2],
+    };
+
+    await apiTrips.addSplit(42, payload);
+
+    expect(apiModule.api.post).toHaveBeenCalledWith('/trips/42/splits', payload);
   });
 
   it('replaces multiple trip splits through the batch endpoint', async () => {
-    apiModule.api.post.mockResolvedValueOnce({ data: [] });
+    apiModule.api.put.mockResolvedValueOnce({ data: [] });
     const payload = {
-      occurredAt: '2026-06-15T12:30:00.000Z',
-      seasonId: 4,
       userIds: [3, 2, 1],
       splits: [
         {
@@ -225,10 +240,10 @@ describe('API command wrappers', () => {
       ],
     };
 
-    await apiFinance.replaceTripSplitsBatch(payload);
+    await apiTrips.replaceSplitsBatch(42, payload);
 
-    expect(apiModule.api.post).toHaveBeenCalledWith(
-      '/finance/trip/splits/batch-replace',
+    expect(apiModule.api.put).toHaveBeenCalledWith(
+      '/trips/42/splits/batch',
       payload
     );
   });

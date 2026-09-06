@@ -16,7 +16,8 @@ import {
   FinanceVersionReferencesRequest,
   GameDuesStatusDto,
   FinanceDto,
-  CreateTripSplitRequest,
+  CreateTripRequest,
+  TripSplitRequest,
   ReplaceTripSplitRequest,
   ReplaceGameDepositsRequest,
   CreateDepositBatchRequest,
@@ -28,6 +29,8 @@ import {
   UpdateOrganizerRotationRequest,
   GenerateOrganizerDutiesRequest,
   GenerateOrganizerDutiesResponse,
+  TripDetailsDto,
+  TripSummaryDto,
 } from './types';
 
 /**
@@ -396,41 +399,6 @@ export const apiFinance = {
     }
   },
 
-  async createTripSplit(body: CreateTripSplitRequest): Promise<FinanceDto[]> {
-    try {
-      const { data } = await api.post<FinanceDto[]>('/finance/trip/split', body);
-      return data;
-    } catch (e) {
-      throw new Error(toErrorMessage(e));
-    }
-  },
-
-  async replaceTripSplit(body: ReplaceTripSplitRequest): Promise<FinanceDto[]> {
-    try {
-      const { data } = await api.post<FinanceDto[]>(
-        '/finance/trip/split/replace',
-        body
-      );
-      return data;
-    } catch (e) {
-      throw toApiRequestError(e);
-    }
-  },
-
-  async replaceTripSplitsBatch(
-    body: ReplaceTripSplitsBatchRequest
-  ): Promise<FinanceDto[]> {
-    try {
-      const { data } = await api.post<FinanceDto[]>(
-        '/finance/trip/splits/batch-replace',
-        body
-      );
-      return data;
-    } catch (e) {
-      throw toApiRequestError(e);
-    }
-  },
-
   async remove(id: number, updatedAt: string): Promise<void> {
     try {
       await api.delete(`/finance/${id}`, { params: { updatedAt } });
@@ -488,14 +456,78 @@ export const apiFinance = {
     }
   },
 
-  async deleteTripsByDate(
-    date: Date,
+};
+
+export const apiTrips = {
+  async getAll(): Promise<TripSummaryDto[]> {
+    try {
+      const { data } = await api.get<TripSummaryDto[]>('/trips');
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
+  async getById(id: number): Promise<TripDetailsDto> {
+    try {
+      const { data } = await api.get<TripDetailsDto>(`/trips/${id}`);
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
+  async create(body: CreateTripRequest): Promise<TripDetailsDto> {
+    try {
+      const { data } = await api.post<TripDetailsDto>('/trips', body);
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
+  async addSplit(id: number, body: TripSplitRequest): Promise<FinanceDto[]> {
+    try {
+      const { data } = await api.post<FinanceDto[]>(`/trips/${id}/splits`, body);
+      return data;
+    } catch (e) {
+      throw toApiRequestError(e);
+    }
+  },
+
+  async replaceSplit(
+    id: number,
+    body: ReplaceTripSplitRequest
+  ): Promise<FinanceDto[]> {
+    try {
+      const { data } = await api.put<FinanceDto[]>(`/trips/${id}/splits`, body);
+      return data;
+    } catch (e) {
+      throw toApiRequestError(e);
+    }
+  },
+
+  async replaceSplitsBatch(
+    id: number,
+    body: ReplaceTripSplitsBatchRequest
+  ): Promise<FinanceDto[]> {
+    try {
+      const { data } = await api.put<FinanceDto[]>(
+        `/trips/${id}/splits/batch`,
+        body
+      );
+      return data;
+    } catch (e) {
+      throw toApiRequestError(e);
+    }
+  },
+
+  async remove(
+    id: number,
     transactions: FinanceVersionReference[]
   ): Promise<void> {
     try {
-      await api.delete(`/finance/trip/by-date?date=${date.toISOString()}`, {
-        data: { transactions },
-      });
+      await api.delete(`/trips/${id}`, { data: { transactions } });
     } catch (e) {
       throw toApiRequestError(e);
     }

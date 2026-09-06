@@ -13,6 +13,7 @@ namespace NineToShineApi.Data
         public DbSet<Game> Game => Set<Game>();
         public DbSet<Ranking> Rankings => Set<Ranking>();
         public DbSet<Finance> Finance => Set<Finance>();
+        public DbSet<Trip> Trips => Set<Trip>();
         public DbSet<OrganizerDuty> OrganizerDuties => Set<OrganizerDuty>();
         public DbSet<OrganizerRotationMember> OrganizerRotationMembers => Set<OrganizerRotationMember>();
 
@@ -151,6 +152,30 @@ namespace NineToShineApi.Data
                 e.HasIndex(x => x.UserId);
             });
 
+            mb.Entity<Trip>(e =>
+            {
+                e.ToTable("trip");
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Id).HasColumnName("id").ValueGeneratedOnAdd();
+                e.Property(x => x.OccurredAt)
+                    .HasColumnName("occurred_at")
+                    .HasColumnType("timestamp with time zone")
+                    .IsRequired();
+                e.Property(x => x.Name)
+                    .HasColumnName("name")
+                    .HasMaxLength(200)
+                    .IsRequired();
+                e.Property(x => x.SeasonId).HasColumnName("season_id");
+
+                e.HasOne(x => x.Season)
+                    .WithMany()
+                    .HasForeignKey(x => x.SeasonId)
+                    .OnDelete(DeleteBehavior.SetNull);
+
+                e.HasIndex(x => x.OccurredAt);
+                e.HasIndex(x => x.SeasonId);
+            });
+
             mb.Entity<OrganizerRotationMember>(e =>
             {
                 e.ToTable("organizer_rotation_member");
@@ -195,6 +220,9 @@ namespace NineToShineApi.Data
                 {
                     t.HasCheckConstraint("ck_finance_direction", "direction IN ('income','expense')");
                     t.HasCheckConstraint("ck_finance_amount_pos", "amount > 0");
+                    t.HasCheckConstraint(
+                        "ck_finance_trip_link",
+                        "(category = 'TRIP' AND trip_id IS NOT NULL) OR (category <> 'TRIP' AND trip_id IS NULL)");
                 });
                 e.HasKey(x => x.Id);
                 e.Property(x => x.Id).ValueGeneratedOnAdd();
@@ -212,6 +240,7 @@ namespace NineToShineApi.Data
                 e.Property(x => x.UserId).HasColumnName("user_id");
                 e.Property(x => x.SeasonId).HasColumnName("season_id");
                 e.Property(x => x.GameId).HasColumnName("game_id");
+                e.Property(x => x.TripId).HasColumnName("trip_id");
 
                 e.HasOne(x => x.User).WithMany()
                     .HasForeignKey(x => x.UserId)
@@ -227,6 +256,11 @@ namespace NineToShineApi.Data
                     .HasForeignKey(x => x.GameId)
                     .OnDelete(DeleteBehavior.SetNull);
 
+                e.HasOne(x => x.Trip)
+                    .WithMany(x => x.Transactions)
+                    .HasForeignKey(x => x.TripId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
 
 
                 e.HasIndex(x => x.OccurredAt);
@@ -235,6 +269,7 @@ namespace NineToShineApi.Data
                 e.HasIndex(x => x.UserId);
                 e.HasIndex(x => x.SeasonId);
                 e.HasIndex(x => x.GameId);
+                e.HasIndex(x => x.TripId);
             });
 
             base.OnModelCreating(mb);

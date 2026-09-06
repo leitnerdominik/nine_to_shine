@@ -90,6 +90,20 @@ public static class DevelopmentDataSeeder
 
         var previousTripDate = AtUtc(today.AddDays(-250), 8);
         var currentTripDate = AtUtc(today.AddDays(-28), 8);
+        var previousTrip = new Trip
+        {
+            OccurredAt = previousTripDate,
+            Name = "Demo-Ausflug: Zugfahrt",
+            SeasonId = previousSeason.Id
+        };
+        var currentTrip = new Trip
+        {
+            OccurredAt = currentTripDate,
+            Name = "Demo-Wanderung: Jause",
+            SeasonId = currentSeason.Id
+        };
+        db.Trips.AddRange(previousTrip, currentTrip);
+
         var finance = new[]
         {
             DemoFinance(games[0].PlayedAt, "income", 30m, "DUES", "Mitgliedsbeitrag", users[0], previousSeason, games[0]),
@@ -97,8 +111,8 @@ public static class DevelopmentDataSeeder
             DemoFinance(games[0].PlayedAt, "income", 12m, "OTHER", "Demo-Getränkekasse", null, previousSeason, games[0]),
             DemoFinance(games[0].PlayedAt, "expense", 85.50m, "EVENT", "Bahnmiete", null, previousSeason, games[0]),
             DemoFinance(games[1].PlayedAt, "income", 10m, "FINE", "Verspätungsstrafe", users[2], previousSeason, games[1]),
-            DemoFinance(previousTripDate, "expense", 24.50m, "TRIP", "Demo-Ausflug: Zugfahrt", users[0], previousSeason),
-            DemoFinance(previousTripDate, "expense", 24.50m, "TRIP", "Demo-Ausflug: Zugfahrt", users[1], previousSeason),
+            DemoFinance(previousTripDate, "expense", 24.50m, "TRIP", "Demo-Ausflug: Zugfahrt", users[0], previousSeason, trip: previousTrip),
+            DemoFinance(previousTripDate, "expense", 24.50m, "TRIP", "Demo-Ausflug: Zugfahrt", users[1], previousSeason, trip: previousTrip),
 
             DemoFinance(games[2].PlayedAt, "income", 30m, "DUES", "Mitgliedsbeitrag", users[0], currentSeason, games[2]),
             DemoFinance(games[2].PlayedAt, "income", 30m, "DUES", "Mitgliedsbeitrag", users[1], currentSeason, games[2]),
@@ -115,9 +129,9 @@ public static class DevelopmentDataSeeder
             DemoFinance(games[4].PlayedAt, "expense", 96m, "EVENT", "Bowlingbahnen", null, currentSeason, games[4]),
             DemoFinance(AtUtc(today.AddDays(-21), 12), "income", 7.50m, "FINE", "Handy am Tisch", users[5], currentSeason),
             DemoFinance(AtUtc(today.AddDays(-20), 10), "expense", 39.80m, "OTHER", "Neue Spielkarten", null, currentSeason),
-            DemoFinance(currentTripDate, "expense", 18.75m, "TRIP", "Demo-Wanderung: Jause", users[0], currentSeason),
-            DemoFinance(currentTripDate, "expense", 18.75m, "TRIP", "Demo-Wanderung: Jause", users[2], currentSeason),
-            DemoFinance(currentTripDate, "expense", 18.75m, "TRIP", "Demo-Wanderung: Jause", users[4], currentSeason)
+            DemoFinance(currentTripDate, "expense", 18.75m, "TRIP", "Demo-Wanderung: Jause", users[0], currentSeason, trip: currentTrip),
+            DemoFinance(currentTripDate, "expense", 18.75m, "TRIP", "Demo-Wanderung: Jause", users[2], currentSeason, trip: currentTrip),
+            DemoFinance(currentTripDate, "expense", 18.75m, "TRIP", "Demo-Wanderung: Jause", users[4], currentSeason, trip: currentTrip)
         };
 
         db.Rankings.AddRange(rankings);
@@ -222,7 +236,8 @@ public static class DevelopmentDataSeeder
         string description,
         User? user,
         Season season,
-        Game? game = null)
+        Game? game = null,
+        Trip? trip = null)
     {
         return new Finance
         {
@@ -233,7 +248,8 @@ public static class DevelopmentDataSeeder
             Description = description,
             UserId = user?.Id,
             SeasonId = season.Id,
-            GameId = game?.Id
+            GameId = game?.Id,
+            Trip = trip
         };
     }
 

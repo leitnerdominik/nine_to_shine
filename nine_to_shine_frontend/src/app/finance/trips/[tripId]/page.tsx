@@ -43,7 +43,7 @@ import { formatCurrency } from '@/common/misc';
 import CustomTitle from '@/components/CustomTitle';
 import Layout from '@/components/Layout';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
-import { apiFinance, apiUsers } from '@/definitions/commands';
+import { apiTrips, apiUsers } from '@/definitions/commands';
 import type {
   FinanceVersionReference,
   ReplaceTripSplitsBatchRequest,
@@ -71,7 +71,7 @@ interface TripDetails {
   baseTransactions: FinanceVersionReference[];
   tripShare: number;
   additionalShare: number;
-  seasonId?: number;
+  seasonId: number | null;
   participants: TripParticipant[];
   additionalBookings: {
     id: string;
@@ -88,13 +88,6 @@ interface TripDetails {
   }[];
 }
 
-const getCleanTripDescription = (description?: string) =>
-  (description || 'Unbenannter Trip')
-    .replace(/\s?\((Anreise\/Unterkunft|Aktivität)\)/g, '')
-    .replace(/\s?\(Aktivität.*?\)/g, '')
-    .replace(/\s?\((Ausgabe|Einnahme).*?\)/g, '')
-    .trim();
-
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
 export default function TripDetailsPage({
@@ -103,7 +96,7 @@ export default function TripDetailsPage({
   params: Promise<{ tripId: string }>;
 }) {
   const { tripId } = use(params);
-  const decodedTripId = decodeURIComponent(tripId);
+  const tripIdNumber = Number(tripId);
   const router = useRouter();
   const { enqueueSnackbar } = useSnackbar();
 
@@ -131,21 +124,12 @@ export default function TripDetailsPage({
   const fetchTripDetails = useCallback(async () => {
     try {
       setLoading(true);
-      const [users, transactions] = await Promise.all([
+      const [users, tripDetails] = await Promise.all([
         apiUsers.getAll(),
-        apiFinance.getAll(),
+        apiTrips.getById(tripIdNumber),
       ]);
 
-      const tripTransactions = transactions.filter(
-        (tx) => tx.category === 'TRIP' && tx.occurredAt === decodedTripId
-      );
-
-      if (tripTransactions.length === 0) {
-        setTrip(null);
-        return;
-      }
-
-      const firstTx = tripTransactions[0];
+      const tripTransactions = tripDetails.transactions;
       const baseTripTransactions = tripTransactions.filter((tx) =>
         tx.description?.includes('Anreise/Unterkunft')
       );
@@ -278,13 +262,13 @@ export default function TripDetailsPage({
       });
 
       setTrip({
-        date: new Date(firstTx.occurredAt),
-        description: getCleanTripDescription(firstTx.description),
+        date: new Date(tripDetails.occurredAt),
+        description: tripDetails.name,
         totalExpense,
         totalIncome,
         balance,
         baseTotal,
-        baseDescription: `${getCleanTripDescription(firstTx.description)} (Anreise/Unterkunft)`,
+        baseDescription: `${tripDetails.name} (Anreise/Unterkunft)`,
         transactions: tripTransactions.map(({ id, updatedAt }) => ({
           id,
           updatedAt,
@@ -295,7 +279,7 @@ export default function TripDetailsPage({
         })),
         tripShare,
         additionalShare,
-        seasonId: firstTx.seasonId,
+        seasonId: tripDetails.seasonId,
         participants,
         additionalBookings,
       });
@@ -310,7 +294,7 @@ export default function TripDetailsPage({
     } finally {
       setLoading(false);
     }
-  }, [decodedTripId]);
+  }, [tripIdNumber]);
 
   useEffect(() => {
     void fetchTripDetails();
@@ -352,12 +336,10 @@ export default function TripDetailsPage({
 
     try {
       setIsSaving(true);
-      await apiFinance.createTripSplit({
-        occurredAt: decodedTripId,
+      await apiTrips.addSplit(tripIdNumber, {
         direction,
         amount: parsedAmount,
         description: bookingDescription,
-        seasonId: trip.seasonId,
         userIds: joinedParticipants.map((participant) => participant.user.id),
       });
 
@@ -417,13 +399,11 @@ export default function TripDetailsPage({
 
     try {
       setIsSaving(true);
-      await apiFinance.replaceTripSplit({
+      await apiTrips.replaceSplit(tripIdNumber, {
         transactions,
-        occurredAt: decodedTripId,
         direction: editDirection,
         amount: parsedAmount,
         description: editDescription.trim() || undefined,
-        seasonId: trip.seasonId,
         userIds: targetUserIds,
       });
 
@@ -515,9 +495,7 @@ export default function TripDetailsPage({
 
     try {
       setIsSaving(true);
-      await apiFinance.replaceTripSplitsBatch({
-        occurredAt: decodedTripId,
-        seasonId: trip.seasonId,
+      await apiTrips.replaceSplitsBatch(tripIdNumber, {
         userIds: selectedUserIds,
         splits,
       });
@@ -535,7 +513,7 @@ export default function TripDetailsPage({
 
     try {
       setIsDeleting(true);
-      await apiFinance.deleteTripsByDate(trip.date, trip.transactions);
+      await apiTrips.remove(tripIdNumber, trip.transactions);
       enqueueSnackbar('Trip erfolgreich gelöscht.', { variant: 'success' });
       router.push('/finance/trips');
     } catch (err) {

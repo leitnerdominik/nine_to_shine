@@ -4,6 +4,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Npgsql;
 using NineToShineApi.Controllers;
 using NineToShineApi.Data;
 using NineToShineApi.Models;
@@ -863,19 +864,32 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Delete_trips_by_date_deletes_only_trip_rows_for_that_day()
+    public async Task Delete_trip_by_id_leaves_other_same_day_trip_untouched()
     {
+        var firstTrip = new Trip
+        {
+            OccurredAt = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc),
+            Name = "First"
+        };
+        var secondTrip = new Trip
+        {
+            OccurredAt = new DateTime(2026, 6, 15, 15, 0, 0, DateTimeKind.Utc),
+            Name = "Second"
+        };
+        await SeedAsync(firstTrip, secondTrip);
         await SeedAsync(
             TestFinance(
                 "expense",
                 10,
                 "TRIP",
-                new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc)),
+                firstTrip.OccurredAt,
+                trip: firstTrip),
             TestFinance(
                 "expense",
                 20,
                 "TRIP",
-                new DateTime(2026, 6, 16, 10, 0, 0, DateTimeKind.Utc)),
+                secondTrip.OccurredAt,
+                trip: secondTrip),
             TestFinance(
                 "expense",
                 30,
@@ -887,7 +901,7 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             .SingleAsync(x => x.Category == "TRIP" && x.Amount == 10m));
         using var request = new HttpRequestMessage(
             HttpMethod.Delete,
-            "/api/finance/trip/by-date?date=2026-06-15T12%3A30%3A00.000Z")
+            $"/api/trips/{firstTrip.Id}")
         {
             Content = JsonContent.Create(new
             {
@@ -917,9 +931,10 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         var season = TestSeason();
         await SeedAsync(nina, alex, bob, season);
 
-        var response = await Client.PostAsJsonAsync("/api/finance/trip/split", new
+        var response = await Client.PostAsJsonAsync("/api/trips", new
         {
             occurredAt = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc),
+            name = "Urlaub",
             direction = "expense",
             amount = 10.00m,
             description = "Urlaub (Ausgabe)",
@@ -927,11 +942,11 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             userIds = new[] { bob.Id, nina.Id, alex.Id }
         });
 
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var created = await response.Content.ReadFromJsonAsync<List<FinanceDto>>();
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await response.Content.ReadFromJsonAsync<TripDetailsDto>();
 
         created.Should().NotBeNull();
-        var createdRows = created!;
+        var createdRows = created!.Transactions;
         createdRows.Should().HaveCount(3);
         createdRows.Sum(x => x.Amount).Should().Be(10.00m);
         createdRows.Should().OnlyContain(x => x.Category == "TRIP");
@@ -944,6 +959,289 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Add_trip_split_uses_the_trip_id_and_canonical_metadata()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        await SeedAsync(nina, season);
+        var trip = new Trip
+        {
+            OccurredAt = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc),
+            Name = "Urlaub",
+            SeasonId = season.Id
+        };
+        await SeedAsync(trip);
+
+        var response = await Client.PostAsJsonAsync($"/api/trips/{trip.Id}/splits", new
+        {
+            direction = "income",
+            amount = 12.50m,
+            description = "Rückerstattung",
+            userIds = new[] { nina.Id }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var created = await response.Content.ReadFromJsonAsync<List<FinanceDto>>();
+        created.Should().ContainSingle();
+        created![0].TripId.Should().Be(trip.Id);
+        created[0].OccurredAt.Should().Be(trip.OccurredAt);
+        created[0].SeasonId.Should().Be(season.Id);
+
+        var details = await Client.GetFromJsonAsync<TripDetailsDto>($"/api/trips/{trip.Id}");
+        details.Should().NotBeNull();
+        details!.Transactions.Should().ContainSingle(transaction =>
+            transaction.TripId == trip.Id &&
+            transaction.Direction == "income" &&
+            transaction.Description == "Rückerstattung");
+    }
+
+    [Fact]
+    public async Task Trips_with_the_same_timestamp_have_distinct_ids_and_delete_independently()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        await SeedAsync(nina, season);
+        var occurredAt = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
+
+        async Task<TripDetailsDto> CreateTrip(string name)
+        {
+            var response = await Client.PostAsJsonAsync("/api/trips", new
+            {
+                occurredAt,
+                name,
+                seasonId = season.Id,
+                direction = "expense",
+                amount = 10m,
+                description = $"{name} (Anreise/Unterkunft)",
+                userIds = new[] { nina.Id }
+            });
+            response.StatusCode.Should().Be(HttpStatusCode.Created);
+            return (await response.Content.ReadFromJsonAsync<TripDetailsDto>())!;
+        }
+
+        var first = await CreateTrip("First");
+        var second = await CreateTrip("Second");
+        first.Id.Should().NotBe(second.Id);
+
+        var summaries = await Client.GetFromJsonAsync<List<TripSummaryDto>>("/api/trips");
+        summaries.Should().Contain(summary => summary.Id == first.Id && summary.Name == "First");
+        summaries.Should().Contain(summary => summary.Id == second.Id && summary.Name == "Second");
+
+        var ordinaryRow = TestFinance("expense", 1m, "OTHER", occurredAt, nina, season.Id);
+        await SeedAsync(ordinaryRow);
+
+        async Task<HttpResponseMessage> DeleteTrip(
+            long tripId,
+            IEnumerable<FinanceVersionReference> references)
+        {
+            using var deleteRequest = new HttpRequestMessage(HttpMethod.Delete, $"/api/trips/{tripId}")
+            {
+                Content = JsonContent.Create(new { transactions = references })
+            };
+            return await Client.SendAsync(deleteRequest);
+        }
+
+        var crossTripResponse = await DeleteTrip(
+            first.Id,
+            second.Transactions.Select(Version));
+        var nonTripResponse = await DeleteTrip(first.Id, [Version(ordinaryRow)]);
+        var missingResponse = await DeleteTrip(
+            first.Id,
+            [new FinanceVersionReference
+            {
+                Id = ordinaryRow.Id + 999,
+                UpdatedAt = ordinaryRow.UpdatedAt
+            }]);
+
+        crossTripResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        nonTripResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        missingResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await Client.GetAsync($"/api/trips/{first.Id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Client.GetAsync($"/api/trips/{second.Id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var deleteResponse = await DeleteTrip(first.Id, first.Transactions.Select(Version));
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await Client.GetAsync($"/api/trips/{first.Id}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await Client.GetAsync($"/api/trips/{second.Id}")).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Delete_trip_rejects_stale_incomplete_and_duplicate_snapshots_without_changes()
+    {
+        var nina = TestUser("Nina", "nina@example.test");
+        var alex = TestUser("Alex", "alex@example.test");
+        var season = TestSeason();
+        await SeedAsync(nina, alex, season);
+        var trip = new Trip
+        {
+            OccurredAt = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc),
+            Name = "Urlaub",
+            SeasonId = season.Id
+        };
+        await SeedAsync(trip);
+        var first = TestFinance("expense", 5m, "TRIP", trip.OccurredAt, nina, season.Id, trip: trip);
+        var second = TestFinance("expense", 5m, "TRIP", trip.OccurredAt, alex, season.Id, trip: trip);
+        await SeedAsync(first, second);
+
+        async Task<HttpResponseMessage> Delete(IEnumerable<object> transactions)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/trips/{trip.Id}")
+            {
+                Content = JsonContent.Create(new { transactions })
+            };
+            return await Client.SendAsync(request);
+        }
+
+        var staleResponse = await Delete(
+        [
+            new
+            {
+                id = first.Id,
+                updatedAt = first.UpdatedAt.AddTicks(-10)
+            },
+            Version(second)
+        ]);
+        var incompleteResponse = await Delete([Version(first)]);
+        var duplicateResponse = await Delete([Version(first), Version(first)]);
+
+        staleResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        incompleteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        duplicateResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        (await WithDbContextAsync(db => db.Trips.AnyAsync(candidate => candidate.Id == trip.Id)))
+            .Should().BeTrue();
+        var rows = await WithDbContextAsync(db => db.Finance.AsNoTracking().ToListAsync());
+        rows.Should().HaveCount(2);
+        rows.Should().Contain(finance => finance.Id == first.Id);
+        rows.Should().Contain(finance => finance.Id == second.Id);
+    }
+
+    [Fact]
+    public async Task Delete_trip_rolls_back_finance_deletion_when_saving_fails()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        await SeedAsync(nina, season);
+        var trip = new Trip
+        {
+            OccurredAt = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc),
+            Name = "Urlaub",
+            SeasonId = season.Id
+        };
+        await SeedAsync(trip);
+        var row = TestFinance("expense", 10m, "TRIP", trip.OccurredAt, nina, season.Id, trip: trip);
+        await SeedAsync(row);
+
+        var connectionString = await WithDbContextAsync(db =>
+            Task.FromResult(db.Database.GetConnectionString()));
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString!)
+            .AddInterceptors(new ConcurrencyFailureInterceptor())
+            .Options;
+
+        await using var db = new AppDbContext(options);
+        var controller = new TripsController(db);
+        var response = await controller.Delete(
+            trip.Id,
+            new FinanceVersionReferencesRequest
+            {
+                Transactions = [Version(row)]
+            },
+            CancellationToken.None);
+
+        response.Should().BeOfType<ConflictObjectResult>();
+        (await WithDbContextAsync(context => context.Trips
+                .AnyAsync(candidate => candidate.Id == trip.Id)))
+            .Should().BeTrue();
+        var rows = await WithDbContextAsync(context => context.Finance
+            .AsNoTracking()
+            .ToListAsync());
+        rows.Should().ContainSingle(finance => finance.Id == row.Id && finance.Amount == 10m);
+    }
+
+    [Fact]
+    public async Task Generic_finance_writes_reject_trip_transactions_atomically()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, nina);
+        await SeedAsync(nina, season, game);
+        var trip = new Trip
+        {
+            OccurredAt = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc),
+            Name = "Urlaub",
+            SeasonId = season.Id
+        };
+        await SeedAsync(trip);
+        var tripRow = TestFinance(
+            "expense",
+            10m,
+            "TRIP",
+            trip.OccurredAt,
+            nina,
+            season.Id,
+            game,
+            trip);
+        var ordinaryRow = TestFinance(
+            "expense",
+            5m,
+            "OTHER",
+            user: nina,
+            seasonId: season.Id,
+            game: game);
+        await SeedAsync(tripRow, ordinaryRow);
+
+        var createResponse = await Client.PostAsJsonAsync("/api/finance", new
+        {
+            direction = "expense",
+            amount = 1m,
+            category = "TRIP"
+        });
+        createResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var updateResponse = await Client.PutAsJsonAsync($"/api/finance/{tripRow.Id}", new
+        {
+            updatedAt = tripRow.UpdatedAt,
+            occurredAt = tripRow.OccurredAt,
+            direction = tripRow.Direction,
+            amount = tripRow.Amount,
+            category = tripRow.Category,
+            userId = tripRow.UserId,
+            seasonId = tripRow.SeasonId
+        });
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var singleDeleteResponse = await Client.DeleteAsync(
+            $"/api/finance/{tripRow.Id}?updatedAt={Uri.EscapeDataString(tripRow.UpdatedAt.ToString("O"))}");
+        singleDeleteResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var bulkResponse = await Client.PostAsJsonAsync("/api/finance/bulk-delete", new
+        {
+            transactions = new[] { Version(tripRow), Version(ordinaryRow) }
+        });
+        bulkResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        using var gameDeleteRequest = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"/api/finance/by-game/{game.Id}")
+        {
+            Content = JsonContent.Create(new
+            {
+                transactions = new[] { Version(tripRow), Version(ordinaryRow) }
+            })
+        };
+        var gameDeleteResponse = await Client.SendAsync(gameDeleteRequest);
+        gameDeleteResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var remainingIds = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .Select(finance => finance.Id)
+            .ToListAsync());
+        remainingIds.Should().Contain(new[] { tripRow.Id, ordinaryRow.Id });
+    }
+
+    [Fact]
     public async Task Replace_trip_split_removes_old_trip_rows_and_creates_split_replacements()
     {
         var nina = TestUser("Nina", "nina@example.test");
@@ -951,18 +1249,23 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         var season = TestSeason();
         await SeedAsync(nina, alex, season);
 
-        var oldTripOne = TestFinance("expense", 1m, "TRIP", user: nina, seasonId: season.Id);
-        var oldTripTwo = TestFinance("expense", 2m, "TRIP", user: alex, seasonId: season.Id);
+        var trip = new Trip
+        {
+            OccurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc),
+            Name = "Urlaub",
+            SeasonId = season.Id
+        };
+        await SeedAsync(trip);
+        var oldTripOne = TestFinance("expense", 1m, "TRIP", trip.OccurredAt, nina, season.Id, trip: trip);
+        var oldTripTwo = TestFinance("expense", 2m, "TRIP", trip.OccurredAt, alex, season.Id, trip: trip);
         await SeedAsync(oldTripOne, oldTripTwo);
 
-        var response = await Client.PostAsJsonAsync("/api/finance/trip/split/replace", new
+        var response = await Client.PutAsJsonAsync($"/api/trips/{trip.Id}/splits", new
         {
             transactions = new[] { Version(oldTripOne), Version(oldTripTwo) },
-            occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc),
             direction = "expense",
             amount = 10.00m,
             description = "Urlaub (Ausgabe: Neu)",
-            seasonId = season.Id,
             userIds = new[] { nina.Id, alex.Id }
         });
 
@@ -975,6 +1278,9 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         createdRows.Sum(x => x.Amount).Should().Be(10.00m);
         createdRows.Should().OnlyContain(x => x.Amount == 5.00m);
         createdRows.Should().OnlyContain(x => x.Description == "Urlaub (Ausgabe: Neu)");
+        createdRows.Should().OnlyContain(x => x.TripId == trip.Id);
+        createdRows.Should().OnlyContain(x => x.OccurredAt == trip.OccurredAt);
+        createdRows.Should().OnlyContain(x => x.SeasonId == season.Id);
 
         var remaining = await WithDbContextAsync(db => db.Finance
             .AsNoTracking()
@@ -984,6 +1290,99 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         remaining.Should().HaveCount(2);
         remaining.Should().NotContain(x => x.Id == oldTripOne.Id || x.Id == oldTripTwo.Id);
         remaining.Sum(x => x.Amount).Should().Be(10.00m);
+        remaining.Should().OnlyContain(x => x.TripId == trip.Id);
+    }
+
+    [Fact]
+    public async Task Replace_trip_split_rejects_incomplete_stale_duplicate_and_mixed_group_references()
+    {
+        var nina = TestUser("Nina", "nina@example.test");
+        var alex = TestUser("Alex", "alex@example.test");
+        var season = TestSeason();
+        await SeedAsync(nina, alex, season);
+
+        var trip = new Trip
+        {
+            OccurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc),
+            Name = "Urlaub",
+            SeasonId = season.Id
+        };
+        await SeedAsync(trip);
+
+        var first = TestFinance("expense", 5m, "TRIP", trip.OccurredAt, nina, season.Id, trip: trip);
+        first.Description = "Urlaub (Aktivität: Museum)";
+        var second = TestFinance("expense", 5m, "TRIP", trip.OccurredAt, alex, season.Id, trip: trip);
+        second.Description = first.Description;
+        var otherGroup = TestFinance("expense", 2m, "TRIP", trip.OccurredAt, nina, season.Id, trip: trip);
+        otherGroup.Description = "Urlaub (Ausgabe: Essen)";
+        await SeedAsync(first, second, otherGroup);
+        var otherTrip = new Trip
+        {
+            OccurredAt = trip.OccurredAt,
+            Name = "Anderer Urlaub",
+            SeasonId = season.Id
+        };
+        await SeedAsync(otherTrip);
+        var otherTripRow = TestFinance(
+            "expense",
+            3m,
+            "TRIP",
+            otherTrip.OccurredAt,
+            nina,
+            season.Id,
+            trip: otherTrip);
+        await SeedAsync(otherTripRow);
+
+        async Task<HttpResponseMessage> Replace(IEnumerable<object> transactions)
+        {
+            return await Client.PutAsJsonAsync($"/api/trips/{trip.Id}/splits", new
+            {
+                transactions,
+                direction = "expense",
+                amount = 12m,
+                description = "Urlaub (Aktivität: Neu)",
+                userIds = new[] { nina.Id, alex.Id }
+            });
+        }
+
+        var incompleteResponse = await Replace([Version(first)]);
+        var staleResponse = await Replace(
+        [
+            new
+            {
+                id = first.Id,
+                updatedAt = first.UpdatedAt.AddTicks(-10)
+            },
+            Version(second)
+        ]);
+        var duplicateResponse = await Replace([Version(first), Version(first)]);
+        var mixedGroupResponse = await Replace([Version(first), Version(otherGroup)]);
+        var crossTripResponse = await Replace([Version(otherTripRow)]);
+        var missingResponse = await Replace(
+        [
+            new
+            {
+                id = otherGroup.Id + 999,
+                updatedAt = otherGroup.UpdatedAt
+            }
+        ]);
+
+        incompleteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        staleResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        duplicateResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        mixedGroupResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        crossTripResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        missingResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .OrderBy(finance => finance.Id)
+            .ToListAsync());
+        rows.Should().HaveCount(4);
+        rows.Should().Contain(finance => finance.Id == first.Id && finance.Amount == 5m);
+        rows.Should().Contain(finance => finance.Id == second.Id && finance.Amount == 5m);
+        rows.Should().Contain(finance => finance.Id == otherGroup.Id && finance.Amount == 2m);
+        rows.Should().Contain(finance => finance.Id == otherTripRow.Id && finance.Amount == 3m);
     }
 
     [Fact]
@@ -995,22 +1394,22 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         await SeedAsync(nina, alex, season);
 
         var occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc);
-        var baseOne = TestFinance("expense", 5m, "TRIP", occurredAt, nina, season.Id);
+        var trip = new Trip { OccurredAt = occurredAt, Name = "Urlaub", SeasonId = season.Id };
+        await SeedAsync(trip);
+        var baseOne = TestFinance("expense", 5m, "TRIP", occurredAt, nina, season.Id, trip: trip);
         baseOne.Description = "Urlaub (Anreise/Unterkunft)";
-        var baseTwo = TestFinance("expense", 5m, "TRIP", occurredAt, alex, season.Id);
+        var baseTwo = TestFinance("expense", 5m, "TRIP", occurredAt, alex, season.Id, trip: trip);
         baseTwo.Description = "Urlaub (Anreise/Unterkunft)";
-        var activityOne = TestFinance("expense", 2m, "TRIP", occurredAt, nina, season.Id);
+        var activityOne = TestFinance("expense", 2m, "TRIP", occurredAt, nina, season.Id, trip: trip);
         activityOne.Description = "Urlaub (Aktivität)";
-        var activityTwo = TestFinance("expense", 2m, "TRIP", occurredAt, alex, season.Id);
+        var activityTwo = TestFinance("expense", 2m, "TRIP", occurredAt, alex, season.Id, trip: trip);
         activityTwo.Description = "Urlaub (Aktivität)";
         await SeedAsync(baseOne, baseTwo, activityOne, activityTwo);
 
-        var response = await Client.PostAsJsonAsync(
-            "/api/finance/trip/splits/batch-replace",
+        var response = await Client.PutAsJsonAsync(
+            $"/api/trips/{trip.Id}/splits/batch",
             new
             {
-                occurredAt,
-                seasonId = season.Id,
                 userIds = new[] { nina.Id, alex.Id },
                 splits = new object[]
                 {
@@ -1071,16 +1470,16 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         await SeedAsync(nina, alex, season);
 
         var occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc);
-        var baseRow = TestFinance("expense", 10m, "TRIP", occurredAt, nina, season.Id);
-        var activityRow = TestFinance("expense", 4m, "TRIP", occurredAt, alex, season.Id);
+        var trip = new Trip { OccurredAt = occurredAt, Name = "Urlaub", SeasonId = season.Id };
+        await SeedAsync(trip);
+        var baseRow = TestFinance("expense", 10m, "TRIP", occurredAt, nina, season.Id, trip: trip);
+        var activityRow = TestFinance("expense", 4m, "TRIP", occurredAt, alex, season.Id, trip: trip);
         await SeedAsync(baseRow, activityRow);
 
-        var response = await Client.PostAsJsonAsync(
-            "/api/finance/trip/splits/batch-replace",
+        var response = await Client.PutAsJsonAsync(
+            $"/api/trips/{trip.Id}/splits/batch",
             new
             {
-                occurredAt,
-                seasonId = season.Id,
                 userIds = new[] { nina.Id, alex.Id },
                 splits = new object[]
                 {
@@ -1118,9 +1517,13 @@ public sealed class FinanceControllerTests : IntegrationTestBase
 
         var occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc);
         var otherOccurredAt = occurredAt.AddHours(1);
-        var currentRow = TestFinance("expense", 10m, "TRIP", occurredAt, nina, season.Id);
-        var otherTripRow = TestFinance("expense", 5m, "TRIP", otherOccurredAt, nina, season.Id);
-        await SeedAsync(currentRow, otherTripRow);
+        var trip = new Trip { OccurredAt = occurredAt, Name = "Current", SeasonId = season.Id };
+        var otherTrip = new Trip { OccurredAt = otherOccurredAt, Name = "Other", SeasonId = season.Id };
+        await SeedAsync(trip, otherTrip);
+        var currentRow = TestFinance("expense", 10m, "TRIP", occurredAt, nina, season.Id, trip: trip);
+        var currentSibling = TestFinance("expense", 3m, "TRIP", occurredAt, nina, season.Id, trip: trip);
+        var otherTripRow = TestFinance("expense", 5m, "TRIP", otherOccurredAt, nina, season.Id, trip: otherTrip);
+        await SeedAsync(currentRow, currentSibling, otherTripRow);
 
         object Split(object[] transactions) => new
         {
@@ -1129,12 +1532,10 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             amount = 12m
         };
 
-        var staleResponse = await Client.PostAsJsonAsync(
-            "/api/finance/trip/splits/batch-replace",
+        var staleResponse = await Client.PutAsJsonAsync(
+            $"/api/trips/{trip.Id}/splits/batch",
             new
             {
-                occurredAt,
-                seasonId = season.Id,
                 userIds = new[] { nina.Id },
                 splits = new[]
                 {
@@ -1149,13 +1550,19 @@ public sealed class FinanceControllerTests : IntegrationTestBase
                 }
             });
 
-        var duplicateReference = Version(currentRow);
-        var duplicateResponse = await Client.PostAsJsonAsync(
-            "/api/finance/trip/splits/batch-replace",
+        var incompleteResponse = await Client.PutAsJsonAsync(
+            $"/api/trips/{trip.Id}/splits/batch",
             new
             {
-                occurredAt,
-                seasonId = season.Id,
+                userIds = new[] { nina.Id },
+                splits = new[] { Split([Version(currentRow)]) }
+            });
+
+        var duplicateReference = Version(currentRow);
+        var duplicateResponse = await Client.PutAsJsonAsync(
+            $"/api/trips/{trip.Id}/splits/batch",
+            new
+            {
                 userIds = new[] { nina.Id },
                 splits = new[]
                 {
@@ -1164,26 +1571,45 @@ public sealed class FinanceControllerTests : IntegrationTestBase
                 }
             });
 
-        var crossTripResponse = await Client.PostAsJsonAsync(
-            "/api/finance/trip/splits/batch-replace",
+        var crossTripResponse = await Client.PutAsJsonAsync(
+            $"/api/trips/{trip.Id}/splits/batch",
             new
             {
-                occurredAt,
-                seasonId = season.Id,
                 userIds = new[] { nina.Id },
                 splits = new[] { Split([Version(otherTripRow)]) }
             });
 
+        var missingResponse = await Client.PutAsJsonAsync(
+            $"/api/trips/{trip.Id}/splits/batch",
+            new
+            {
+                userIds = new[] { nina.Id },
+                splits = new[]
+                {
+                    Split(
+                    [
+                        new
+                        {
+                            id = otherTripRow.Id + 999,
+                            updatedAt = otherTripRow.UpdatedAt
+                        }
+                    ])
+                }
+            });
+
         staleResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        incompleteResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
         duplicateResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         crossTripResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        missingResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
 
         var rows = await WithDbContextAsync(db => db.Finance
             .AsNoTracking()
             .OrderBy(finance => finance.Id)
             .ToListAsync());
-        rows.Should().HaveCount(2);
+        rows.Should().HaveCount(3);
         rows.Should().Contain(finance => finance.Id == currentRow.Id && finance.Amount == 10m);
+        rows.Should().Contain(finance => finance.Id == currentSibling.Id && finance.Amount == 3m);
         rows.Should().Contain(finance => finance.Id == otherTripRow.Id && finance.Amount == 5m);
     }
 
@@ -1195,7 +1621,9 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         await SeedAsync(nina, season);
 
         var occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc);
-        var oldTrip = TestFinance("expense", 10m, "TRIP", occurredAt, nina, season.Id);
+        var trip = new Trip { OccurredAt = occurredAt, Name = "Urlaub", SeasonId = season.Id };
+        await SeedAsync(trip);
+        var oldTrip = TestFinance("expense", 10m, "TRIP", occurredAt, nina, season.Id, trip: trip);
         await SeedAsync(oldTrip);
 
         var connectionString = await WithDbContextAsync(db =>
@@ -1206,16 +1634,15 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             .Options;
 
         await using var db = new AppDbContext(options);
-        var controller = new FinanceController(db);
-        var response = await controller.ReplaceTripSplitsBatch(
-            new ReplaceTripSplitsBatchRequest
+        var controller = new TripsController(db);
+        var response = await controller.ReplaceSplitsBatch(
+            trip.Id,
+            new ReplaceTripSplitsByIdRequest
             {
-                OccurredAt = occurredAt,
-                SeasonId = season.Id,
                 UserIds = [nina.Id],
                 Splits =
                 [
-                    new TripSplitBatchEntryRequest
+                    new TripSplitByIdBatchEntryRequest
                     {
                         Transactions = [Version(oldTrip)],
                         Direction = "expense",
@@ -1234,6 +1661,126 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             finance.Id == oldTrip.Id && finance.Amount == 10m);
     }
 
+    [Theory]
+    [InlineData("add")]
+    [InlineData("replace")]
+    [InlineData("batch")]
+    [InlineData("delete")]
+    public async Task Trip_mutations_take_an_aggregate_row_lock(string mutation)
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        await SeedAsync(nina, season);
+        var trip = new Trip
+        {
+            OccurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc),
+            Name = "Urlaub",
+            SeasonId = season.Id
+        };
+        await SeedAsync(trip);
+        var existing = TestFinance(
+            "expense",
+            10m,
+            "TRIP",
+            trip.OccurredAt,
+            nina,
+            season.Id,
+            trip: trip);
+        existing.Description = "Urlaub (Anreise/Unterkunft)";
+        await SeedAsync(existing);
+
+        var connectionString = await WithDbContextAsync(db =>
+            Task.FromResult(db.Database.GetConnectionString()));
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString!)
+            .Options;
+
+        await using var blocker = new AppDbContext(options);
+        await blocker.Database.OpenConnectionAsync();
+        await using var blockerTransaction = await blocker.Database.BeginTransactionAsync();
+        await blocker.Trips
+            .FromSqlInterpolated($"SELECT * FROM trip WHERE id = {trip.Id} FOR UPDATE")
+            .SingleAsync();
+
+        await using var contender = new AppDbContext(options);
+        await contender.Database.OpenConnectionAsync();
+        await contender.Database.ExecuteSqlRawAsync("SET lock_timeout = '100ms'");
+        var controller = new TripsController(contender);
+
+        async Task InvokeMutation()
+        {
+            switch (mutation)
+            {
+                case "add":
+                    await controller.AddSplit(
+                        trip.Id,
+                        new TripSplitRequest
+                        {
+                            Direction = "expense",
+                            Amount = 10m,
+                            UserIds = [nina.Id]
+                        },
+                        CancellationToken.None);
+                    break;
+                case "replace":
+                    await controller.ReplaceSplit(
+                        trip.Id,
+                        new ReplaceTripSplitByIdRequest
+                        {
+                            Transactions = [Version(existing)],
+                            Direction = "expense",
+                            Amount = 12m,
+                            UserIds = [nina.Id]
+                        },
+                        CancellationToken.None);
+                    break;
+                case "batch":
+                    await controller.ReplaceSplitsBatch(
+                        trip.Id,
+                        new ReplaceTripSplitsByIdRequest
+                        {
+                            UserIds = [nina.Id],
+                            Splits =
+                            [
+                                new TripSplitByIdBatchEntryRequest
+                                {
+                                    Transactions = [Version(existing)],
+                                    Direction = "expense",
+                                    Amount = 12m
+                                }
+                            ]
+                        },
+                        CancellationToken.None);
+                    break;
+                case "delete":
+                    await controller.Delete(
+                        trip.Id,
+                        new FinanceVersionReferencesRequest
+                        {
+                            Transactions = [Version(existing)]
+                        },
+                        CancellationToken.None);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(mutation));
+            }
+        }
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(InvokeMutation);
+
+        exception.InnerException.Should().BeOfType<PostgresException>()
+            .Which.SqlState.Should().Be(PostgresErrorCodes.LockNotAvailable);
+        await blockerTransaction.RollbackAsync();
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .ToListAsync());
+        rows.Should().ContainSingle(finance =>
+            finance.Id == existing.Id && finance.Amount == 10m);
+        (await WithDbContextAsync(db => db.Trips.AnyAsync(candidate => candidate.Id == trip.Id)))
+            .Should().BeTrue();
+    }
+
     [Fact]
     public async Task Trip_split_rejects_amounts_that_cannot_give_every_user_one_cent()
     {
@@ -1242,8 +1789,10 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         var season = TestSeason();
         await SeedAsync(nina, alex, season);
 
-        var createResponse = await Client.PostAsJsonAsync("/api/finance/trip/split", new
+        var createResponse = await Client.PostAsJsonAsync("/api/trips", new
         {
+            occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc),
+            name = "Urlaub",
             direction = "expense",
             amount = 0.01m,
             seasonId = season.Id,
@@ -1258,16 +1807,22 @@ public sealed class FinanceControllerTests : IntegrationTestBase
 
         rowsAfterCreateRejection.Should().BeEmpty();
 
-        var oldTripOne = TestFinance("expense", 1m, "TRIP", user: nina, seasonId: season.Id);
-        var oldTripTwo = TestFinance("expense", 2m, "TRIP", user: alex, seasonId: season.Id);
+        var trip = new Trip
+        {
+            OccurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc),
+            Name = "Urlaub",
+            SeasonId = season.Id
+        };
+        await SeedAsync(trip);
+        var oldTripOne = TestFinance("expense", 1m, "TRIP", trip.OccurredAt, nina, season.Id, trip: trip);
+        var oldTripTwo = TestFinance("expense", 2m, "TRIP", trip.OccurredAt, alex, season.Id, trip: trip);
         await SeedAsync(oldTripOne, oldTripTwo);
 
-        var replaceResponse = await Client.PostAsJsonAsync("/api/finance/trip/split/replace", new
+        var replaceResponse = await Client.PutAsJsonAsync($"/api/trips/{trip.Id}/splits", new
         {
             transactions = new[] { Version(oldTripOne), Version(oldTripTwo) },
             direction = "expense",
             amount = 0.01m,
-            seasonId = season.Id,
             userIds = new[] { nina.Id, alex.Id }
         });
 
@@ -1290,29 +1845,48 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         var season = TestSeason();
         await SeedAsync(nina, season);
 
-        var invalidAmount = await Client.PostAsJsonAsync("/api/finance/trip/split", new
+        var occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc);
+        var validTripFields = new
         {
+            occurredAt,
+            name = "Urlaub",
+            seasonId = season.Id
+        };
+
+        var invalidAmount = await Client.PostAsJsonAsync("/api/trips", new
+        {
+            validTripFields.occurredAt,
+            validTripFields.name,
+            validTripFields.seasonId,
             direction = "expense",
             amount = 10.001m,
             userIds = new[] { nina.Id }
         });
 
-        var emptyUsers = await Client.PostAsJsonAsync("/api/finance/trip/split", new
+        var emptyUsers = await Client.PostAsJsonAsync("/api/trips", new
         {
+            validTripFields.occurredAt,
+            validTripFields.name,
+            validTripFields.seasonId,
             direction = "expense",
             amount = 10.00m,
             userIds = Array.Empty<long>()
         });
 
-        var missingUser = await Client.PostAsJsonAsync("/api/finance/trip/split", new
+        var missingUser = await Client.PostAsJsonAsync("/api/trips", new
         {
+            validTripFields.occurredAt,
+            validTripFields.name,
+            validTripFields.seasonId,
             direction = "expense",
             amount = 10.00m,
             userIds = new[] { nina.Id + 999 }
         });
 
-        var invalidSeason = await Client.PostAsJsonAsync("/api/finance/trip/split", new
+        var invalidSeason = await Client.PostAsJsonAsync("/api/trips", new
         {
+            occurredAt,
+            name = "Urlaub",
             direction = "expense",
             amount = 10.00m,
             seasonId = season.Id + 999,
@@ -1321,8 +1895,10 @@ public sealed class FinanceControllerTests : IntegrationTestBase
 
         var nonTrip = TestFinance("expense", 10m, "PIZZA", user: nina, seasonId: season.Id);
         await SeedAsync(nonTrip);
+        var trip = new Trip { OccurredAt = occurredAt, Name = "Urlaub", SeasonId = season.Id };
+        await SeedAsync(trip);
 
-        var nonTripReplace = await Client.PostAsJsonAsync("/api/finance/trip/split/replace", new
+        var nonTripReplace = await Client.PutAsJsonAsync($"/api/trips/{trip.Id}/splits", new
         {
             transactions = new[] { Version(nonTrip) },
             direction = "expense",
@@ -1350,6 +1926,12 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     private static FinanceVersionReference Version(Finance finance) => new()
+    {
+        Id = finance.Id,
+        UpdatedAt = finance.UpdatedAt
+    };
+
+    private static FinanceVersionReference Version(FinanceDto finance) => new()
     {
         Id = finance.Id,
         UpdatedAt = finance.UpdatedAt
