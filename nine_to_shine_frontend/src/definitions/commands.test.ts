@@ -102,6 +102,50 @@ describe('API command wrappers', () => {
     );
   });
 
+  it('creates deposits through the batch endpoint', async () => {
+    apiModule.api.post.mockResolvedValueOnce({ data: [] });
+    const payload = {
+      occurredAt: '2026-07-01T00:00:00.000Z',
+      seasonId: 3,
+      gameId: 7,
+      members: [
+        {
+          userId: 2,
+          memberAmount: 30,
+          clubAmount: 20,
+          description: 'Bar',
+        },
+      ],
+      otherIncomes: [{ amount: 5, description: 'Restgeld' }],
+    };
+
+    await apiFinance.createDepositBatch(payload);
+
+    expect(apiModule.api.post).toHaveBeenCalledWith(
+      '/finance/deposits/batch',
+      payload
+    );
+  });
+
+  it('creates expenses through the batch endpoint', async () => {
+    apiModule.api.post.mockResolvedValueOnce({ data: [] });
+    const payload = {
+      occurredAt: '2026-07-01T00:00:00.000Z',
+      seasonId: 3,
+      items: [
+        { amount: 12.5, description: 'Pizza' },
+        { amount: 7.5, description: 'Getränke' },
+      ],
+    };
+
+    await apiFinance.createExpenseBatch(payload);
+
+    expect(apiModule.api.post).toHaveBeenCalledWith(
+      '/finance/expenses/batch',
+      payload
+    );
+  });
+
   it('uses the backend trip deletion route with an ISO date', async () => {
     apiModule.api.delete.mockResolvedValueOnce({});
 
@@ -159,6 +203,32 @@ describe('API command wrappers', () => {
 
     expect(apiModule.api.post).toHaveBeenCalledWith(
       '/finance/trip/split/replace',
+      payload
+    );
+  });
+
+  it('replaces multiple trip splits through the batch endpoint', async () => {
+    apiModule.api.post.mockResolvedValueOnce({ data: [] });
+    const payload = {
+      occurredAt: '2026-06-15T12:30:00.000Z',
+      seasonId: 4,
+      userIds: [3, 2, 1],
+      splits: [
+        {
+          transactions: [
+            { id: 10, updatedAt: '2026-06-15T13:00:00.000Z' },
+          ],
+          direction: 'expense' as const,
+          amount: 10,
+          description: 'Urlaub (Anreise/Unterkunft)',
+        },
+      ],
+    };
+
+    await apiFinance.replaceTripSplitsBatch(payload);
+
+    expect(apiModule.api.post).toHaveBeenCalledWith(
+      '/finance/trip/splits/batch-replace',
       payload
     );
   });

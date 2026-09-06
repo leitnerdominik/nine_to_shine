@@ -44,7 +44,11 @@ import CustomTitle from '@/components/CustomTitle';
 import Layout from '@/components/Layout';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import { apiFinance, apiUsers } from '@/definitions/commands';
-import type { FinanceVersionReference, UserDto } from '@/definitions/types';
+import type {
+  FinanceVersionReference,
+  ReplaceTripSplitsBatchRequest,
+  UserDto,
+} from '@/definitions/types';
 import { isConflictError } from '@/definitions/api';
 
 interface TripParticipant {
@@ -484,32 +488,14 @@ export default function TripDetailsPage({
     const selectedUserIds = selectedParticipants.map(
       (participant) => participant.user.id
     );
-    const requests: Promise<unknown>[] = [];
-
-    if (trip.baseTransactions.length > 0) {
-      requests.push(
-        apiFinance.replaceTripSplit({
-          transactions: trip.baseTransactions,
-          occurredAt: decodedTripId,
-          direction: 'expense',
-          amount: parsedBaseAmount,
-          description: trip.baseDescription,
-          seasonId: trip.seasonId,
-          userIds: selectedUserIds,
-        })
-      );
-    } else {
-      requests.push(
-        apiFinance.createTripSplit({
-          occurredAt: decodedTripId,
-          direction: 'expense',
-          amount: parsedBaseAmount,
-          description: trip.baseDescription,
-          seasonId: trip.seasonId,
-          userIds: selectedUserIds,
-        })
-      );
-    }
+    const splits: ReplaceTripSplitsBatchRequest['splits'] = [
+      {
+        transactions: trip.baseTransactions,
+        direction: 'expense',
+        amount: parsedBaseAmount,
+        description: trip.baseDescription,
+      },
+    ];
 
     trip.additionalBookings.forEach((booking) => {
       const transactions = booking.transactionEntries.map(
@@ -517,22 +503,24 @@ export default function TripDetailsPage({
       );
       if (transactions.length === 0) return;
 
-      requests.push(
-        apiFinance.replaceTripSplit({
+      splits.push(
+        {
           transactions,
-          occurredAt: decodedTripId,
           direction: booking.direction,
           amount: booking.amount,
           description: booking.description,
-          seasonId: trip.seasonId,
-          userIds: selectedUserIds,
-        })
+        }
       );
     });
 
     try {
       setIsSaving(true);
-      await Promise.all(requests);
+      await apiFinance.replaceTripSplitsBatch({
+        occurredAt: decodedTripId,
+        seasonId: trip.seasonId,
+        userIds: selectedUserIds,
+        splits,
+      });
       setIsEditingTripSetup(false);
       await fetchTripDetails();
     } catch (err) {

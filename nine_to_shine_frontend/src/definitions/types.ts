@@ -178,6 +178,24 @@ export interface ReplaceGameDepositsRequest {
   otherIncomes: GameDepositOtherIncomeRequest[];
 }
 
+export interface CreateDepositBatchRequest {
+  occurredAt: string;
+  seasonId: number;
+  gameId?: number;
+  members: GameDepositMemberRequest[];
+  otherIncomes: GameDepositOtherIncomeRequest[];
+}
+
+export interface CreateExpenseBatchRequest {
+  occurredAt: string;
+  seasonId: number;
+  gameId?: number;
+  items: {
+    amount: number;
+    description?: string;
+  }[];
+}
+
 export interface CreateTripSplitRequest {
   occurredAt?: string;
   direction: 'income' | 'expense';
@@ -189,6 +207,18 @@ export interface CreateTripSplitRequest {
 
 export interface ReplaceTripSplitRequest extends CreateTripSplitRequest {
   transactions: FinanceVersionReference[];
+}
+
+export interface ReplaceTripSplitsBatchRequest {
+  occurredAt: string;
+  seasonId?: number;
+  userIds: number[];
+  splits: {
+    transactions: FinanceVersionReference[];
+    direction: 'income' | 'expense';
+    amount: number;
+    description?: string;
+  }[];
 }
 
 export interface TopRankedDto {

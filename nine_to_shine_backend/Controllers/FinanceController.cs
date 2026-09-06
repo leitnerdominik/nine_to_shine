@@ -336,6 +336,101 @@ namespace NineToShineApi.Controllers
             return CreatedAtAction(nameof(GetById), new { id = entity.Id }, dto);
         }
 
+        // POST: api/finance/deposits/batch
+        // Erstellt alle vom Einzahlungsformular erzeugten Buchungen atomar.
+        [HttpPost("deposits/batch")]
+        public async Task<ActionResult<IEnumerable<FinanceDto>>> CreateDepositBatch(
+            [FromBody] CreateDepositBatchRequest body,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            if (!body.OccurredAt.HasValue)
+                return BadRequest(new { error = "occurredAt is required." });
+
+            if (!body.SeasonId.HasValue)
+                return BadRequest(new { error = "seasonId is required." });
+
+            if (body.Members.Count == 0 && body.OtherIncomes.Count == 0)
+                return BadRequest(new { error = "At least one deposit is required." });
+
+            var depositError = ValidateDepositEntries(body.Members, body.OtherIncomes);
+            if (depositError is not null) return depositError;
+
+            var seasonExists = await _db.Season.AnyAsync(s => s.Id == body.SeasonId.Value, ct);
+            if (!seasonExists) return BadRequest(new { error = "season_id not found." });
+
+            if (body.GameId.HasValue)
+            {
+                var gameExists = await _db.Game.AnyAsync(g => g.Id == body.GameId.Value, ct);
+                if (!gameExists) return BadRequest(new { error = "game_id not found." });
+            }
+
+            var memberNames = await GetDepositMemberNames(body.Members, ct);
+            if (memberNames.Count != body.Members.Count)
+                return BadRequest(new { error = "All member userIds must refer to existing users." });
+
+            var created = CreateDepositRows(
+                body.OccurredAt.Value,
+                body.SeasonId.Value,
+                body.GameId,
+                body.Members,
+                body.OtherIncomes,
+                memberNames);
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+            _db.Finance.AddRange(created);
+            await _db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            return Ok(await GetFinanceDtos(created.Select(finance => finance.Id).ToList(), ct));
+        }
+
+        // POST: api/finance/expenses/batch
+        // Erstellt alle vom Ausgabenformular erzeugten Buchungen atomar.
+        [HttpPost("expenses/batch")]
+        public async Task<ActionResult<IEnumerable<FinanceDto>>> CreateExpenseBatch(
+            [FromBody] CreateExpenseBatchRequest body,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            if (!body.OccurredAt.HasValue)
+                return BadRequest(new { error = "occurredAt is required." });
+
+            if (!body.SeasonId.HasValue)
+                return BadRequest(new { error = "seasonId is required." });
+
+            var seasonExists = await _db.Season.AnyAsync(s => s.Id == body.SeasonId.Value, ct);
+            if (!seasonExists) return BadRequest(new { error = "season_id not found." });
+
+            if (body.GameId.HasValue)
+            {
+                var gameExists = await _db.Game.AnyAsync(g => g.Id == body.GameId.Value, ct);
+                if (!gameExists) return BadRequest(new { error = "game_id not found." });
+            }
+
+            var category = body.GameId.HasValue ? "EVENT" : "OTHER";
+            var created = body.Items.Select(item => new Finance
+            {
+                OccurredAt = body.OccurredAt.Value,
+                Direction = "expense",
+                Amount = item.Amount,
+                Category = category,
+                Description = item.Description,
+                UserId = null,
+                SeasonId = body.SeasonId.Value,
+                GameId = body.GameId
+            }).ToList();
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+            _db.Finance.AddRange(created);
+            await _db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            return Ok(await GetFinanceDtos(created.Select(finance => finance.Id).ToList(), ct));
+        }
+
         // PUT: api/finance/123
         [HttpPut("{id:long}")]
         public async Task<ActionResult<FinanceDto>> Update(
@@ -562,37 +657,11 @@ namespace NineToShineApi.Controllers
                 .Select(reference => reference.Id)
                 .ToList();
 
-            var memberIds = body.Members.Select(member => member.UserId).Distinct().ToList();
-            if (memberIds.Count != body.Members.Count)
-                return BadRequest(new { error = "members must not contain duplicate userIds." });
+            var depositError = ValidateDepositEntries(body.Members, body.OtherIncomes);
+            if (depositError is not null) return depositError;
 
-            if (body.Members.Any(member =>
-                    !IsValidMoneyAmount(member.MemberAmount, allowZero: true) ||
-                    !IsValidMoneyAmount(member.ClubAmount, allowZero: true) ||
-                    (member.MemberAmount == 0 && member.ClubAmount == 0)))
-            {
-                return BadRequest(new
-                {
-                    error = "Member and club amounts must be non-negative, have at most two decimal places, and at least one amount must be greater than 0."
-                });
-            }
-
-            if (body.OtherIncomes.Any(income =>
-                    !IsValidMoneyAmount(income.Amount, allowZero: false)))
-            {
-                return BadRequest(new
-                {
-                    error = "Other income amounts must be greater than 0 and have at most two decimal places."
-                });
-            }
-
-            var members = await _db.Users
-                .AsNoTracking()
-                .Where(user => memberIds.Contains(user.Id))
-                .Select(user => new { user.Id, user.DisplayName })
-                .ToListAsync(ct);
-
-            if (members.Count != memberIds.Count)
+            var memberNames = await GetDepositMemberNames(body.Members, ct);
+            if (memberNames.Count != body.Members.Count)
                 return BadRequest(new { error = "All member userIds must refer to existing users." });
 
             await using var transaction = await _db.Database.BeginTransactionAsync(ct);
@@ -617,63 +686,13 @@ namespace NineToShineApi.Controllers
                 });
             }
 
-            var memberNames = members.ToDictionary(member => member.Id, member => member.DisplayName);
-            var created = new List<Finance>();
-            var occurredAt = body.OccurredAt.Value;
-
-            foreach (var member in body.Members)
-            {
-                var note = string.IsNullOrWhiteSpace(member.Description)
-                    ? null
-                    : member.Description.Trim();
-                var description = note is null
-                    ? "Mitgliedsbeitrag"
-                    : $"Mitgliedsbeitrag - {note}";
-
-                if (member.MemberAmount > 0)
-                {
-                    created.Add(new Finance
-                    {
-                        OccurredAt = occurredAt,
-                        Direction = "income",
-                        Amount = member.MemberAmount,
-                        Category = "DUES",
-                        Description = description,
-                        UserId = member.UserId,
-                        SeasonId = game.SeasonId,
-                        GameId = game.Id
-                    });
-                }
-
-                if (member.ClubAmount > 0)
-                {
-                    created.Add(new Finance
-                    {
-                        OccurredAt = occurredAt,
-                        Direction = "income",
-                        Amount = member.ClubAmount,
-                        Category = "DUES",
-                        Description = $"{description} ({memberNames[member.UserId]})",
-                        UserId = null,
-                        SeasonId = game.SeasonId,
-                        GameId = game.Id
-                    });
-                }
-            }
-
-            created.AddRange(body.OtherIncomes.Select(income => new Finance
-            {
-                OccurredAt = occurredAt,
-                Direction = "income",
-                Amount = income.Amount,
-                Category = "OTHER",
-                Description = string.IsNullOrWhiteSpace(income.Description)
-                    ? "Sonstige Einnahme"
-                    : income.Description.Trim(),
-                UserId = null,
-                SeasonId = game.SeasonId,
-                GameId = game.Id
-            }));
+            var created = CreateDepositRows(
+                body.OccurredAt.Value,
+                game.SeasonId,
+                game.Id,
+                body.Members,
+                body.OtherIncomes,
+                memberNames);
 
             try
             {
@@ -807,6 +826,76 @@ namespace NineToShineApi.Controllers
             return Ok(createdDtos);
         }
 
+        // POST: api/finance/trip/splits/batch-replace
+        // Erstellt und ersetzt mehrere TRIP-Buchungen in einer Transaktion.
+        [HttpPost("trip/splits/batch-replace")]
+        public async Task<ActionResult<IEnumerable<FinanceDto>>> ReplaceTripSplitsBatch(
+            [FromBody] ReplaceTripSplitsBatchRequest body,
+            CancellationToken ct)
+        {
+            if (!ModelState.IsValid) return ValidationProblem(ModelState);
+
+            if (!body.OccurredAt.HasValue)
+                return BadRequest(new { error = "occurredAt is required." });
+
+            foreach (var split in body.Splits)
+            {
+                var splitRequest = ToTripSplitRequest(body, split);
+                var validationResult = await ValidateTripSplitRequest(splitRequest, ct);
+                if (validationResult is not null) return validationResult;
+            }
+
+            var versionReferences = body.Splits
+                .SelectMany(split => split.Transactions)
+                .ToList();
+            var duplicateError = ValidateVersionReferences(versionReferences);
+            if (duplicateError is not null) return duplicateError;
+
+            var transactionIds = versionReferences
+                .Select(reference => reference.Id)
+                .ToList();
+
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+            var existingTransactions = transactionIds.Count == 0
+                ? []
+                : await _db.Finance
+                    .Where(finance => transactionIds.Contains(finance.Id))
+                    .ToListAsync(ct);
+
+            if (!VersionsMatch(existingTransactions, versionReferences))
+                return FinanceConflict();
+
+            if (existingTransactions.Any(finance =>
+                    finance.Category != "TRIP" ||
+                    finance.OccurredAt != body.OccurredAt.Value))
+            {
+                return BadRequest(new
+                {
+                    error = "Only TRIP transactions from the supplied occurredAt can be replaced."
+                });
+            }
+
+            var created = new List<Finance>();
+            foreach (var split in body.Splits)
+                created.AddRange(CreateTripSplitRows(ToTripSplitRequest(body, split)));
+
+            try
+            {
+                if (existingTransactions.Count > 0)
+                    _db.Finance.RemoveRange(existingTransactions);
+
+                await _db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await transaction.RollbackAsync(ct);
+                return FinanceConflict();
+            }
+
+            return Ok(await GetFinanceDtos(created.Select(finance => finance.Id).ToList(), ct));
+        }
+
         private async Task<ActionResult<IEnumerable<FinanceDto>>?> ValidateTripSplitRequest(
             CreateTripSplitRequest body,
             CancellationToken ct)
@@ -870,6 +959,127 @@ namespace NineToShineApi.Controllers
 
             _db.Finance.AddRange(entities);
             return entities;
+        }
+
+        private static CreateTripSplitRequest ToTripSplitRequest(
+            ReplaceTripSplitsBatchRequest body,
+            TripSplitBatchEntryRequest split) =>
+            new()
+            {
+                OccurredAt = body.OccurredAt,
+                Direction = split.Direction,
+                Amount = split.Amount,
+                Description = split.Description,
+                SeasonId = body.SeasonId,
+                UserIds = body.UserIds
+            };
+
+        private BadRequestObjectResult? ValidateDepositEntries(
+            IReadOnlyCollection<GameDepositMemberRequest> members,
+            IReadOnlyCollection<GameDepositOtherIncomeRequest> otherIncomes)
+        {
+            if (members.Select(member => member.UserId).Distinct().Count() != members.Count)
+                return BadRequest(new { error = "members must not contain duplicate userIds." });
+
+            if (members.Any(member =>
+                    !IsValidMoneyAmount(member.MemberAmount, allowZero: true) ||
+                    !IsValidMoneyAmount(member.ClubAmount, allowZero: true) ||
+                    (member.MemberAmount == 0 && member.ClubAmount == 0)))
+            {
+                return BadRequest(new
+                {
+                    error = "Member and club amounts must be non-negative, have at most two decimal places, and at least one amount must be greater than 0."
+                });
+            }
+
+            if (otherIncomes.Any(income =>
+                    !IsValidMoneyAmount(income.Amount, allowZero: false)))
+            {
+                return BadRequest(new
+                {
+                    error = "Other income amounts must be greater than 0 and have at most two decimal places."
+                });
+            }
+
+            return null;
+        }
+
+        private async Task<Dictionary<long, string>> GetDepositMemberNames(
+            IReadOnlyCollection<GameDepositMemberRequest> members,
+            CancellationToken ct)
+        {
+            var memberIds = members.Select(member => member.UserId).ToList();
+            return await _db.Users
+                .AsNoTracking()
+                .Where(user => memberIds.Contains(user.Id))
+                .ToDictionaryAsync(user => user.Id, user => user.DisplayName, ct);
+        }
+
+        private List<Finance> CreateDepositRows(
+            DateTime occurredAt,
+            long seasonId,
+            long? gameId,
+            IReadOnlyCollection<GameDepositMemberRequest> members,
+            IReadOnlyCollection<GameDepositOtherIncomeRequest> otherIncomes,
+            IReadOnlyDictionary<long, string> memberNames)
+        {
+            var created = new List<Finance>();
+
+            foreach (var member in members)
+            {
+                var note = string.IsNullOrWhiteSpace(member.Description)
+                    ? null
+                    : member.Description.Trim();
+                var description = note is null
+                    ? "Mitgliedsbeitrag"
+                    : $"Mitgliedsbeitrag - {note}";
+
+                if (member.MemberAmount > 0)
+                {
+                    created.Add(new Finance
+                    {
+                        OccurredAt = occurredAt,
+                        Direction = "income",
+                        Amount = member.MemberAmount,
+                        Category = "DUES",
+                        Description = description,
+                        UserId = member.UserId,
+                        SeasonId = seasonId,
+                        GameId = gameId
+                    });
+                }
+
+                if (member.ClubAmount > 0)
+                {
+                    created.Add(new Finance
+                    {
+                        OccurredAt = occurredAt,
+                        Direction = "income",
+                        Amount = member.ClubAmount,
+                        Category = "DUES",
+                        Description = $"{description} ({memberNames[member.UserId]})",
+                        UserId = null,
+                        SeasonId = seasonId,
+                        GameId = gameId
+                    });
+                }
+            }
+
+            created.AddRange(otherIncomes.Select(income => new Finance
+            {
+                OccurredAt = occurredAt,
+                Direction = "income",
+                Amount = income.Amount,
+                Category = "OTHER",
+                Description = string.IsNullOrWhiteSpace(income.Description)
+                    ? "Sonstige Einnahme"
+                    : income.Description.Trim(),
+                UserId = null,
+                SeasonId = seasonId,
+                GameId = gameId
+            }));
+
+            return created;
         }
 
         private async Task<List<FinanceDto>> GetFinanceDtos(
@@ -1095,6 +1305,25 @@ namespace NineToShineApi.Controllers
         public List<GameDepositOtherIncomeRequest> OtherIncomes { get; set; } = [];
     }
 
+    public class CreateDepositBatchRequest
+    {
+        [Required]
+        public DateTime? OccurredAt { get; set; }
+
+        [Required]
+        [Range(1, long.MaxValue)]
+        public long? SeasonId { get; set; }
+
+        [Range(1, long.MaxValue)]
+        public long? GameId { get; set; }
+
+        [Required]
+        public List<GameDepositMemberRequest> Members { get; set; } = [];
+
+        [Required]
+        public List<GameDepositOtherIncomeRequest> OtherIncomes { get; set; } = [];
+    }
+
     public class GameDepositMemberRequest
     {
         [Required]
@@ -1109,6 +1338,64 @@ namespace NineToShineApi.Controllers
 
     public class GameDepositOtherIncomeRequest
     {
+        public decimal Amount { get; set; }
+
+        public string? Description { get; set; }
+    }
+
+    public class CreateExpenseBatchRequest
+    {
+        [Required]
+        public DateTime? OccurredAt { get; set; }
+
+        [Required]
+        [Range(1, long.MaxValue)]
+        public long? SeasonId { get; set; }
+
+        [Range(1, long.MaxValue)]
+        public long? GameId { get; set; }
+
+        [Required]
+        [MinLength(1)]
+        public List<CreateExpenseBatchItemRequest> Items { get; set; } = [];
+    }
+
+    public class CreateExpenseBatchItemRequest
+    {
+        [Range(0.01, 1000000)]
+        public decimal Amount { get; set; }
+
+        public string? Description { get; set; }
+    }
+
+    public class ReplaceTripSplitsBatchRequest
+    {
+        [Required]
+        public DateTime? OccurredAt { get; set; }
+
+        [Display(Name = "season_id")]
+        public long? SeasonId { get; set; }
+
+        [Required]
+        [MinLength(1)]
+        public List<long> UserIds { get; set; } = [];
+
+        [Required]
+        [MinLength(1)]
+        public List<TripSplitBatchEntryRequest> Splits { get; set; } = [];
+    }
+
+    public class TripSplitBatchEntryRequest
+    {
+        [Required]
+        public List<FinanceVersionReference> Transactions { get; set; } = [];
+
+        [Required]
+        [RegularExpression("income|expense", ErrorMessage = "Direction must be 'income' or 'expense'")]
+        public string Direction { get; set; } = "expense";
+
+        [Required]
+        [Range(0.01, 1000000)]
         public decimal Amount { get; set; }
 
         public string? Description { get; set; }

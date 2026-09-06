@@ -19,6 +19,9 @@ import {
   CreateTripSplitRequest,
   ReplaceTripSplitRequest,
   ReplaceGameDepositsRequest,
+  CreateDepositBatchRequest,
+  CreateExpenseBatchRequest,
+  ReplaceTripSplitsBatchRequest,
   SaveRankedGameRequest,
   UpdateFinanceRequest,
   TopRankedDto,
@@ -365,6 +368,34 @@ export const apiFinance = {
     }
   },
 
+  async createDepositBatch(
+    body: CreateDepositBatchRequest
+  ): Promise<FinanceDto[]> {
+    try {
+      const { data } = await api.post<FinanceDto[]>(
+        '/finance/deposits/batch',
+        body
+      );
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
+  async createExpenseBatch(
+    body: CreateExpenseBatchRequest
+  ): Promise<FinanceDto[]> {
+    try {
+      const { data } = await api.post<FinanceDto[]>(
+        '/finance/expenses/batch',
+        body
+      );
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
   async createTripSplit(body: CreateTripSplitRequest): Promise<FinanceDto[]> {
     try {
       const { data } = await api.post<FinanceDto[]>('/finance/trip/split', body);
@@ -378,6 +409,20 @@ export const apiFinance = {
     try {
       const { data } = await api.post<FinanceDto[]>(
         '/finance/trip/split/replace',
+        body
+      );
+      return data;
+    } catch (e) {
+      throw toApiRequestError(e);
+    }
+  },
+
+  async replaceTripSplitsBatch(
+    body: ReplaceTripSplitsBatchRequest
+  ): Promise<FinanceDto[]> {
+    try {
+      const { data } = await api.post<FinanceDto[]>(
+        '/finance/trip/splits/batch-replace',
         body
       );
       return data;

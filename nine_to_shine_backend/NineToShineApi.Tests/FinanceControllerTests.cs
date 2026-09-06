@@ -64,6 +64,280 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Create_deposit_batch_creates_all_derived_rows()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, nina);
+        await SeedAsync(nina, season, game);
+
+        var occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc);
+        var response = await Client.PostAsJsonAsync("/api/finance/deposits/batch", new
+        {
+            occurredAt,
+            seasonId = season.Id,
+            gameId = game.Id,
+            members = new[]
+            {
+                new
+                {
+                    userId = nina.Id,
+                    memberAmount = 30m,
+                    clubAmount = 20m,
+                    description = "Bar"
+                }
+            },
+            otherIncomes = new[]
+            {
+                new { amount = 5m, description = "Restgeld" }
+            }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var created = await response.Content.ReadFromJsonAsync<List<FinanceDto>>();
+        created.Should().HaveCount(3);
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .OrderBy(finance => finance.Id)
+            .ToListAsync());
+        rows.Should().Contain(finance =>
+            finance.UserId == nina.Id &&
+            finance.Direction == "income" &&
+            finance.Category == "DUES" &&
+            finance.Amount == 30m &&
+            finance.Description == "Mitgliedsbeitrag - Bar");
+        rows.Should().Contain(finance =>
+            finance.UserId == null &&
+            finance.Category == "DUES" &&
+            finance.Amount == 20m &&
+            finance.Description == "Mitgliedsbeitrag - Bar (Nina)");
+        rows.Should().Contain(finance =>
+            finance.UserId == null &&
+            finance.Category == "OTHER" &&
+            finance.Amount == 5m &&
+            finance.Description == "Restgeld");
+        rows.Should().OnlyContain(finance =>
+            finance.OccurredAt == occurredAt &&
+            finance.SeasonId == season.Id &&
+            finance.GameId == game.Id);
+    }
+
+    [Fact]
+    public async Task Create_deposit_batch_rejects_a_later_invalid_entry_without_persisting_rows()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        await SeedAsync(nina, season);
+
+        var response = await Client.PostAsJsonAsync("/api/finance/deposits/batch", new
+        {
+            occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+            seasonId = season.Id,
+            members = new[]
+            {
+                new { userId = nina.Id, memberAmount = 30m, clubAmount = 20m },
+                new { userId = nina.Id + 999, memberAmount = 30m, clubAmount = 20m }
+            },
+            otherIncomes = Array.Empty<object>()
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var rows = await WithDbContextAsync(db => db.Finance.AsNoTracking().ToListAsync());
+        rows.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_expense_batch_creates_all_event_expenses()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, nina);
+        await SeedAsync(nina, season, game);
+
+        var response = await Client.PostAsJsonAsync("/api/finance/expenses/batch", new
+        {
+            occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+            seasonId = season.Id,
+            gameId = game.Id,
+            items = new[]
+            {
+                new { amount = 12.50m, description = "Pizza" },
+                new { amount = 7.50m, description = "Getränke" }
+            }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var created = await response.Content.ReadFromJsonAsync<List<FinanceDto>>();
+        created.Should().HaveCount(2);
+        created.Should().OnlyContain(finance =>
+            finance.Direction == "expense" &&
+            finance.Category == "EVENT" &&
+            finance.UserId == null &&
+            finance.SeasonId == season.Id &&
+            finance.GameId == game.Id);
+        created!.Sum(finance => finance.Amount).Should().Be(20m);
+    }
+
+    [Fact]
+    public async Task Create_batches_without_a_game_apply_domain_defaults()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        await SeedAsync(nina, season);
+
+        var depositResponse = await Client.PostAsJsonAsync("/api/finance/deposits/batch", new
+        {
+            occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+            seasonId = season.Id,
+            members = new[]
+            {
+                new
+                {
+                    userId = nina.Id,
+                    memberAmount = 30m,
+                    clubAmount = 20m,
+                    description = "   "
+                }
+            },
+            otherIncomes = new[]
+            {
+                new { amount = 5m, description = "   " }
+            }
+        });
+        var expenseResponse = await Client.PostAsJsonAsync("/api/finance/expenses/batch", new
+        {
+            occurredAt = new DateTime(2026, 7, 2, 12, 0, 0, DateTimeKind.Utc),
+            seasonId = season.Id,
+            items = new[] { new { amount = 12.50m, description = "Pizza" } }
+        });
+
+        depositResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        expenseResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .OrderBy(finance => finance.Id)
+            .ToListAsync());
+        rows.Should().HaveCount(4);
+        rows.Should().OnlyContain(finance => finance.GameId == null);
+        rows.Should().Contain(finance =>
+            finance.UserId == nina.Id &&
+            finance.Category == "DUES" &&
+            finance.Description == "Mitgliedsbeitrag");
+        rows.Should().Contain(finance =>
+            finance.UserId == null &&
+            finance.Category == "DUES" &&
+            finance.Description == "Mitgliedsbeitrag (Nina)");
+        rows.Should().Contain(finance =>
+            finance.Direction == "income" &&
+            finance.Category == "OTHER" &&
+            finance.Description == "Sonstige Einnahme");
+        rows.Should().Contain(finance =>
+            finance.Direction == "expense" &&
+            finance.Category == "OTHER" &&
+            finance.Description == "Pizza");
+    }
+
+    [Fact]
+    public async Task Create_expense_batch_rejects_a_later_invalid_entry_without_persisting_rows()
+    {
+        var season = TestSeason();
+        await SeedAsync(season);
+
+        var response = await Client.PostAsJsonAsync("/api/finance/expenses/batch", new
+        {
+            occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+            seasonId = season.Id,
+            items = new[]
+            {
+                new { amount = 12.50m, description = "Pizza" },
+                new { amount = 0m, description = "Ungültig" }
+            }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var rows = await WithDbContextAsync(db => db.Finance.AsNoTracking().ToListAsync());
+        rows.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Create_batches_roll_back_when_save_fails_after_database_writes()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        await SeedAsync(nina, season);
+
+        var connectionString = await WithDbContextAsync(db =>
+            Task.FromResult(db.Database.GetConnectionString()));
+        DbContextOptions<AppDbContext> FailureOptions() =>
+            new DbContextOptionsBuilder<AppDbContext>()
+                .UseNpgsql(connectionString!)
+                .AddInterceptors(new ConcurrencyFailureInterceptor())
+                .Options;
+
+        await using (var depositDb = new AppDbContext(FailureOptions()))
+        {
+            var controller = new FinanceController(depositDb);
+            Func<Task> createDeposits = async () => await controller.CreateDepositBatch(
+                new CreateDepositBatchRequest
+                {
+                    OccurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+                    SeasonId = season.Id,
+                    Members =
+                    [
+                        new GameDepositMemberRequest
+                        {
+                            UserId = nina.Id,
+                            MemberAmount = 30m,
+                            ClubAmount = 20m
+                        }
+                    ]
+                },
+                CancellationToken.None);
+
+            await createDeposits.Should().ThrowAsync<DbUpdateConcurrencyException>();
+        }
+
+        var rowsAfterDeposits = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .ToListAsync());
+        rowsAfterDeposits.Should().BeEmpty();
+
+        await using (var expenseDb = new AppDbContext(FailureOptions()))
+        {
+            var controller = new FinanceController(expenseDb);
+            Func<Task> createExpenses = async () => await controller.CreateExpenseBatch(
+                new CreateExpenseBatchRequest
+                {
+                    OccurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+                    SeasonId = season.Id,
+                    Items =
+                    [
+                        new CreateExpenseBatchItemRequest
+                        {
+                            Amount = 12.50m,
+                            Description = "Pizza"
+                        },
+                        new CreateExpenseBatchItemRequest
+                        {
+                            Amount = 7.50m,
+                            Description = "Getränke"
+                        }
+                    ]
+                },
+                CancellationToken.None);
+
+            await createExpenses.Should().ThrowAsync<DbUpdateConcurrencyException>();
+        }
+
+        var rowsAfterExpenses = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .ToListAsync());
+        rowsAfterExpenses.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task Update_advances_updated_at_and_rejects_a_stale_version()
     {
         var finance = TestFinance("income", 30m, "DUES");
@@ -713,6 +987,254 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Replace_trip_splits_batch_replaces_base_and_additional_bookings_together()
+    {
+        var nina = TestUser("Nina", "nina@example.test");
+        var alex = TestUser("Alex", "alex@example.test");
+        var season = TestSeason();
+        await SeedAsync(nina, alex, season);
+
+        var occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc);
+        var baseOne = TestFinance("expense", 5m, "TRIP", occurredAt, nina, season.Id);
+        baseOne.Description = "Urlaub (Anreise/Unterkunft)";
+        var baseTwo = TestFinance("expense", 5m, "TRIP", occurredAt, alex, season.Id);
+        baseTwo.Description = "Urlaub (Anreise/Unterkunft)";
+        var activityOne = TestFinance("expense", 2m, "TRIP", occurredAt, nina, season.Id);
+        activityOne.Description = "Urlaub (Aktivität)";
+        var activityTwo = TestFinance("expense", 2m, "TRIP", occurredAt, alex, season.Id);
+        activityTwo.Description = "Urlaub (Aktivität)";
+        await SeedAsync(baseOne, baseTwo, activityOne, activityTwo);
+
+        var response = await Client.PostAsJsonAsync(
+            "/api/finance/trip/splits/batch-replace",
+            new
+            {
+                occurredAt,
+                seasonId = season.Id,
+                userIds = new[] { nina.Id, alex.Id },
+                splits = new object[]
+                {
+                    new
+                    {
+                        transactions = new[] { Version(baseOne), Version(baseTwo) },
+                        direction = "expense",
+                        amount = 12m,
+                        description = "Urlaub (Anreise/Unterkunft)"
+                    },
+                    new
+                    {
+                        transactions = new[] { Version(activityOne), Version(activityTwo) },
+                        direction = "income",
+                        amount = 3m,
+                        description = "Urlaub (Aktivität)"
+                    },
+                    new
+                    {
+                        transactions = Array.Empty<FinanceVersionReference>(),
+                        direction = "expense",
+                        amount = 2m,
+                        description = "Urlaub (Neue Aktivität)"
+                    }
+                }
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var created = await response.Content.ReadFromJsonAsync<List<FinanceDto>>();
+        var createdRows = created!;
+        createdRows.Should().HaveCount(6);
+        createdRows.Should().OnlyContain(finance =>
+            finance.Category == "TRIP" &&
+            finance.OccurredAt == occurredAt &&
+            finance.SeasonId == season.Id);
+        createdRows.Where(finance => finance.Direction == "expense")
+            .Sum(finance => finance.Amount).Should().Be(14m);
+        createdRows.Where(finance => finance.Direction == "income")
+            .Sum(finance => finance.Amount).Should().Be(3m);
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .ToListAsync());
+        rows.Should().HaveCount(6);
+        rows.Should().NotContain(finance =>
+            finance.Id == baseOne.Id ||
+            finance.Id == baseTwo.Id ||
+            finance.Id == activityOne.Id ||
+            finance.Id == activityTwo.Id);
+    }
+
+    [Fact]
+    public async Task Replace_trip_splits_batch_rejects_a_later_invalid_split_without_changes()
+    {
+        var nina = TestUser("Nina", "nina@example.test");
+        var alex = TestUser("Alex", "alex@example.test");
+        var season = TestSeason();
+        await SeedAsync(nina, alex, season);
+
+        var occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc);
+        var baseRow = TestFinance("expense", 10m, "TRIP", occurredAt, nina, season.Id);
+        var activityRow = TestFinance("expense", 4m, "TRIP", occurredAt, alex, season.Id);
+        await SeedAsync(baseRow, activityRow);
+
+        var response = await Client.PostAsJsonAsync(
+            "/api/finance/trip/splits/batch-replace",
+            new
+            {
+                occurredAt,
+                seasonId = season.Id,
+                userIds = new[] { nina.Id, alex.Id },
+                splits = new object[]
+                {
+                    new
+                    {
+                        transactions = new[] { Version(baseRow) },
+                        direction = "expense",
+                        amount = 12m
+                    },
+                    new
+                    {
+                        transactions = new[] { Version(activityRow) },
+                        direction = "expense",
+                        amount = 0.01m
+                    }
+                }
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .OrderBy(finance => finance.Id)
+            .ToListAsync());
+        rows.Should().HaveCount(2);
+        rows.Should().Contain(finance => finance.Id == baseRow.Id && finance.Amount == 10m);
+        rows.Should().Contain(finance => finance.Id == activityRow.Id && finance.Amount == 4m);
+    }
+
+    [Fact]
+    public async Task Replace_trip_splits_batch_rejects_stale_duplicate_and_cross_trip_references()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        await SeedAsync(nina, season);
+
+        var occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc);
+        var otherOccurredAt = occurredAt.AddHours(1);
+        var currentRow = TestFinance("expense", 10m, "TRIP", occurredAt, nina, season.Id);
+        var otherTripRow = TestFinance("expense", 5m, "TRIP", otherOccurredAt, nina, season.Id);
+        await SeedAsync(currentRow, otherTripRow);
+
+        object Split(object[] transactions) => new
+        {
+            transactions,
+            direction = "expense",
+            amount = 12m
+        };
+
+        var staleResponse = await Client.PostAsJsonAsync(
+            "/api/finance/trip/splits/batch-replace",
+            new
+            {
+                occurredAt,
+                seasonId = season.Id,
+                userIds = new[] { nina.Id },
+                splits = new[]
+                {
+                    Split(
+                    [
+                        new
+                        {
+                            id = currentRow.Id,
+                            updatedAt = currentRow.UpdatedAt.AddTicks(-10)
+                        }
+                    ])
+                }
+            });
+
+        var duplicateReference = Version(currentRow);
+        var duplicateResponse = await Client.PostAsJsonAsync(
+            "/api/finance/trip/splits/batch-replace",
+            new
+            {
+                occurredAt,
+                seasonId = season.Id,
+                userIds = new[] { nina.Id },
+                splits = new[]
+                {
+                    Split([duplicateReference]),
+                    Split([duplicateReference])
+                }
+            });
+
+        var crossTripResponse = await Client.PostAsJsonAsync(
+            "/api/finance/trip/splits/batch-replace",
+            new
+            {
+                occurredAt,
+                seasonId = season.Id,
+                userIds = new[] { nina.Id },
+                splits = new[] { Split([Version(otherTripRow)]) }
+            });
+
+        staleResponse.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        duplicateResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        crossTripResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .OrderBy(finance => finance.Id)
+            .ToListAsync());
+        rows.Should().HaveCount(2);
+        rows.Should().Contain(finance => finance.Id == currentRow.Id && finance.Amount == 10m);
+        rows.Should().Contain(finance => finance.Id == otherTripRow.Id && finance.Amount == 5m);
+    }
+
+    [Fact]
+    public async Task Replace_trip_splits_batch_rolls_back_when_rows_change_during_save()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        await SeedAsync(nina, season);
+
+        var occurredAt = new DateTime(2026, 6, 16, 12, 0, 0, DateTimeKind.Utc);
+        var oldTrip = TestFinance("expense", 10m, "TRIP", occurredAt, nina, season.Id);
+        await SeedAsync(oldTrip);
+
+        var connectionString = await WithDbContextAsync(db =>
+            Task.FromResult(db.Database.GetConnectionString()));
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connectionString!)
+            .AddInterceptors(new ConcurrencyFailureInterceptor())
+            .Options;
+
+        await using var db = new AppDbContext(options);
+        var controller = new FinanceController(db);
+        var response = await controller.ReplaceTripSplitsBatch(
+            new ReplaceTripSplitsBatchRequest
+            {
+                OccurredAt = occurredAt,
+                SeasonId = season.Id,
+                UserIds = [nina.Id],
+                Splits =
+                [
+                    new TripSplitBatchEntryRequest
+                    {
+                        Transactions = [Version(oldTrip)],
+                        Direction = "expense",
+                        Amount = 12m,
+                        Description = "Urlaub (Anreise/Unterkunft)"
+                    }
+                ]
+            },
+            CancellationToken.None);
+
+        response.Result.Should().BeOfType<ConflictObjectResult>();
+        var rows = await WithDbContextAsync(context => context.Finance
+            .AsNoTracking()
+            .ToListAsync());
+        rows.Should().ContainSingle(finance =>
+            finance.Id == oldTrip.Id && finance.Amount == 10m);
+    }
+
+    [Fact]
     public async Task Trip_split_rejects_amounts_that_cannot_give_every_user_one_cent()
     {
         var nina = TestUser("Nina", "nina@example.test");
@@ -817,12 +1339,12 @@ public sealed class FinanceControllerTests : IntegrationTestBase
 
     private sealed class ConcurrencyFailureInterceptor : SaveChangesInterceptor
     {
-        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
-            DbContextEventData eventData,
-            InterceptionResult<int> result,
+        public override ValueTask<int> SavedChangesAsync(
+            SaveChangesCompletedEventData eventData,
+            int result,
             CancellationToken cancellationToken = default)
         {
-            return ValueTask.FromException<InterceptionResult<int>>(
+            return ValueTask.FromException<int>(
                 new DbUpdateConcurrencyException());
         }
     }

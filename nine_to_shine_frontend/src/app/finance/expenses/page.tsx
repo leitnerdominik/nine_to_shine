@@ -23,7 +23,7 @@ import Layout from '@/components/Layout';
 import CustomTitle from '@/components/CustomTitle';
 import { apiFinance, apiSeason, apiGame } from '@/definitions/commands';
 import type {
-  CreateFinanceRequest,
+  CreateExpenseBatchRequest,
   SeasonDto,
   GameDto,
 } from '@/definitions/types';
@@ -138,31 +138,20 @@ export default function ExpensesPage() {
 
   // --- Submit ---
   const onSubmit = async (data: FormOutput) => {
-    const promises: Promise<CreateFinanceRequest>[] = [];
-
-    const category = data.gameId ? 'EVENT' : 'OTHER';
-
-    for (const item of data.items) {
-      const amount = parseFloat(item.amount);
-
-      promises.push(
-        apiFinance.create({
-          occurredAt: new Date(data.globalDate).toISOString(),
-          direction: 'expense',
-          amount: amount,
-          category: category,
-          description: item.description,
-          userId: null,
-          seasonId: data.seasonId,
-          gameId: data.gameId || undefined,
-        })
-      );
-    }
+    const body: CreateExpenseBatchRequest = {
+      occurredAt: new Date(data.globalDate).toISOString(),
+      seasonId: data.seasonId,
+      gameId: data.gameId || undefined,
+      items: data.items.map((item) => ({
+        amount: parseFloat(item.amount),
+        description: item.description,
+      })),
+    };
 
     try {
-      await Promise.all(promises);
+      await apiFinance.createExpenseBatch(body);
 
-      enqueueSnackbar(`${promises.length} Ausgaben erfolgreich gebucht!`, {
+      enqueueSnackbar(`${body.items.length} Ausgaben erfolgreich gebucht!`, {
         variant: 'success',
       });
 

@@ -30,7 +30,7 @@ import {
   apiGame,
 } from '@/definitions/commands';
 import type {
-  CreateFinanceRequest,
+  CreateDepositBatchRequest,
   UserDto,
   SeasonDto,
   GameDto,
@@ -297,78 +297,28 @@ function BulkDepositForm() {
       return;
     }
 
-    const promises: Promise<CreateFinanceRequest>[] = [];
-    let countMembers = 0;
-    let countOther = 0;
+    const body: CreateDepositBatchRequest = {
+      occurredAt: new Date(data.globalDate).toISOString(),
+      seasonId: data.seasonId,
+      gameId: data.gameId || undefined,
+      members: data.entries
+        .filter((entry) => entry.hasPaid)
+        .map((entry) => ({
+          userId: entry.userId,
+          memberAmount: toMoneyAmount(entry.memberAmount),
+          clubAmount: toMoneyAmount(entry.clubAmount),
+          description: entry.description?.trim() || undefined,
+        }))
+        .filter((entry) => entry.memberAmount > 0 || entry.clubAmount > 0),
+      otherIncomes: data.otherIncomes
+        .map((income) => ({
+          amount: toMoneyAmount(income.amount || '0'),
+          description: income.description?.trim() || undefined,
+        }))
+        .filter((income) => income.amount > 0),
+    };
 
-    // 1. Mitglieder buchen
-    for (const row of data.entries) {
-      if (!row.hasPaid) continue;
-
-      const mAmount = parseFloat(row.memberAmount);
-      const cAmount = parseFloat(row.clubAmount);
-
-      const baseDesc = 'Mitgliedsbeitrag';
-      const extraDesc = row.description ? ` - ${row.description}` : '';
-      const fullDesc = `${baseDesc}${extraDesc}`;
-
-      if (mAmount > 0 || cAmount > 0) {
-        countMembers++;
-        // User Gutschrift
-        if (mAmount > 0) {
-          promises.push(
-            apiFinance.create({
-              occurredAt: new Date(data.globalDate).toISOString(),
-              direction: 'income',
-              amount: mAmount,
-              category: 'DUES',
-              description: fullDesc,
-              userId: row.userId,
-              seasonId: data.seasonId,
-              gameId: data.gameId || undefined,
-            })
-          );
-        }
-
-        // Vereinsbeitrag
-        if (cAmount > 0) {
-          promises.push(
-            apiFinance.create({
-              occurredAt: new Date(data.globalDate).toISOString(),
-              direction: 'income',
-              amount: cAmount,
-              category: 'DUES',
-              description: `${fullDesc} (${row.displayName})`,
-              userId: null,
-              seasonId: data.seasonId,
-              gameId: data.gameId || undefined,
-            })
-          );
-        }
-      }
-    }
-
-    // 2. Sonstige Einnahmen buchen
-    for (const item of data.otherIncomes) {
-      const amount = parseFloat(item.amount || '0');
-      if (amount > 0) {
-        countOther++;
-        promises.push(
-          apiFinance.create({
-            occurredAt: new Date(data.globalDate).toISOString(),
-            direction: 'income',
-            amount: amount,
-            category: 'OTHER',
-            description: item.description || 'Sonstige Einnahme',
-            userId: null,
-            seasonId: data.seasonId,
-            gameId: data.gameId || undefined,
-          })
-        );
-      }
-    }
-
-    if (countMembers === 0 && countOther === 0) {
+    if (body.members.length === 0 && body.otherIncomes.length === 0) {
       enqueueSnackbar('Keine Buchungen ausgewählt oder Beträge eingegeben.', {
         variant: 'warning',
       });
@@ -376,7 +326,7 @@ function BulkDepositForm() {
     }
 
     try {
-      await Promise.all(promises);
+      await apiFinance.createDepositBatch(body);
 
       enqueueSnackbar("Einnahmen erfolgreich gebucht!", {
         variant: 'success',

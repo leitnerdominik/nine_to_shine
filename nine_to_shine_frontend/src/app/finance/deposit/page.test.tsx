@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   getSeasons: vi.fn(),
   getGames: vi.fn(),
   getFinances: vi.fn(),
-  createFinance: vi.fn(),
+  createDepositBatch: vi.fn(),
   replaceGameDeposits: vi.fn(),
 }));
 
@@ -27,7 +27,7 @@ vi.mock('@/definitions/commands', () => ({
   apiGame: { getAll: mocks.getGames },
   apiFinance: {
     getAll: mocks.getFinances,
-    create: mocks.createFinance,
+    createDepositBatch: mocks.createDepositBatch,
     replaceGameDeposits: mocks.replaceGameDeposits,
   },
 }));
@@ -95,12 +95,13 @@ const finances = [
 
 describe('BulkDepositPage edit mode', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mocks.search = 'editGameId=10';
     mocks.getUsers.mockResolvedValue([user]);
     mocks.getSeasons.mockResolvedValue([season]);
     mocks.getGames.mockResolvedValue([game]);
     mocks.getFinances.mockResolvedValue(finances);
-    mocks.createFinance.mockResolvedValue({});
+    mocks.createDepositBatch.mockResolvedValue([]);
     mocks.replaceGameDeposits.mockResolvedValue([]);
   });
 
@@ -255,8 +256,45 @@ describe('BulkDepositPage edit mode', () => {
     await browser.click(screen.getByRole('checkbox', { name: 'Bezahlt' }));
     await browser.click(screen.getByRole('button', { name: 'Speichern' }));
 
-    await waitFor(() => expect(mocks.createFinance).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(mocks.createDepositBatch).toHaveBeenCalledWith({
+        occurredAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T00:00:00\.000Z$/),
+        seasonId: 3,
+        gameId: undefined,
+        members: [
+          {
+            userId: 1,
+            memberAmount: 30,
+            clubAmount: 20,
+            description: undefined,
+          },
+        ],
+        otherIncomes: [],
+      })
+    );
     expect(mocks.replaceGameDeposits).not.toHaveBeenCalled();
     expect(mocks.push).toHaveBeenCalledWith('/finance');
+  });
+
+  it('keeps create-mode input and stays on the page when the batch fails', async () => {
+    const browser = userEvent.setup();
+    mocks.search = '';
+    mocks.createDepositBatch.mockRejectedValueOnce(new Error('Nicht gespeichert'));
+    renderWithProviders(<BulkDepositPage />);
+
+    await browser.click(
+      await screen.findByRole('checkbox', { name: 'Bezahlt' })
+    );
+    const memberAmount = screen.getByRole('spinbutton', {
+      name: 'Gutschrift',
+    });
+    await browser.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await waitFor(() =>
+      expect(mocks.createDepositBatch).toHaveBeenCalledTimes(1)
+    );
+    expect(memberAmount).toHaveValue(30);
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(await screen.findByText('Nicht gespeichert')).toBeInTheDocument();
   });
 });
