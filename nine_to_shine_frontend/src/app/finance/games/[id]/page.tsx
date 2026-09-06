@@ -99,6 +99,12 @@ export default function GamePaymentDetailsPage({
       // 2. Transaktionen aufteilen
       const incomeTx = gameFinances.filter((f) => f.direction === 'income');
       const expenseTx = gameFinances.filter((f) => f.direction === 'expense');
+      const memberDuesIncomeTx = incomeTx.filter(
+        (f) =>
+          f.category === 'DUES' &&
+          f.amount > 0 &&
+          typeof f.userId === 'number'
+      );
 
       // Einnahmen weiter aufteilen: Mit User vs. Ohne User
       const otherIncomeTx = incomeTx.filter((f) => !f.userId); // userId ist null/undefined
@@ -117,8 +123,9 @@ export default function GamePaymentDetailsPage({
 
       // 4. Spieler Tabelle aufbauen (Wer hat gezahlt?)
       const pRows: PaymentRow[] = allUsers.map((user) => {
-        // Nur Einnahmen von DIESEM User
-        const userPayments = incomeTx.filter((f) => f.userId === user.id);
+        const userPayments = memberDuesIncomeTx.filter(
+          (f) => f.userId === user.id
+        );
         const userSum = userPayments.reduce((sum, f) => sum + f.amount, 0);
 
         return {
