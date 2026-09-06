@@ -14,22 +14,30 @@ namespace NineToShineApi.Tests.Support;
 public sealed class NineToShineApiFactory : WebApplicationFactory<Program>
 {
     private readonly PostgresFixture.TestDatabaseLease _databaseLease;
+    private readonly string _environmentName;
+    private readonly bool _seedDevelopmentData;
 
-    public NineToShineApiFactory(PostgresFixture.TestDatabaseLease databaseLease)
+    public NineToShineApiFactory(
+        PostgresFixture.TestDatabaseLease databaseLease,
+        string environmentName = "Testing",
+        bool seedDevelopmentData = false)
     {
         _databaseLease = databaseLease;
+        _environmentName = environmentName;
+        _seedDevelopmentData = seedDevelopmentData;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Testing");
+        builder.UseEnvironment(_environmentName);
 
         builder.ConfigureAppConfiguration((_, config) =>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] = _databaseLease.ConnectionString,
-                ["Firebase:ProjectId"] = "nine-to-shine-tests"
+                ["Firebase:ProjectId"] = "nine-to-shine-tests",
+                ["DevelopmentData:Seed"] = _seedDevelopmentData.ToString()
             });
         });
 

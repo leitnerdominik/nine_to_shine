@@ -137,6 +137,13 @@ try
             await db.Database.MigrateAsync(); // ensures DB & runs all migrations
             app.Logger.LogInformation("Datenbankmigration erfolgreich.");
             Console.WriteLine("Datenbankmigration erfolgreich.");
+
+            if (app.Environment.IsDevelopment() &&
+                app.Configuration.GetValue<bool>("DevelopmentData:Seed"))
+            {
+                await DevelopmentDataSeeder.SeedAsync(db);
+                app.Logger.LogInformation("Development-Demodaten wurden geprüft.");
+            }
         }
     }
 
