@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -71,7 +73,7 @@ public sealed class NineToShineApiFactory : WebApplicationFactory<Program>
         return client;
     }
 
-    public async Task ResetDatabaseAsync()
+    public async Task ResetDatabaseAsync(string? targetMigration = null)
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -79,6 +81,7 @@ public sealed class NineToShineApiFactory : WebApplicationFactory<Program>
             _databaseLease.DatabaseName,
             db.Database.GetDbConnection().Database);
         await db.Database.EnsureDeletedAsync();
-        await db.Database.MigrateAsync();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync(targetMigration);
     }
 }

@@ -77,12 +77,7 @@ public sealed class SchemaConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Ranking_points_migration_preserves_legacy_outliers_and_enforces_new_writes()
     {
-        await WithDbContextAsync(async db =>
-        {
-            var migrator = db.Database.GetService<IMigrator>();
-            await migrator.MigrateAsync("20260906130000_AddOrganizerDutyManualOverrides");
-            return true;
-        });
+        await Factory.ResetDatabaseAsync("20260906130000_AddOrganizerDutyManualOverrides");
 
         var nina = TestUser();
         var alex = TestUser("Alex", "alex@example.test");

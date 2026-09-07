@@ -15,11 +15,11 @@ public sealed class TripMigrationTests : IntegrationTestBase
     [Fact]
     public async Task Stable_trip_id_migration_backfills_legacy_timestamp_groups()
     {
+        await Factory.ResetDatabaseAsync("20260813120000_AddFinanceUpdatedAtConcurrency");
+
         await WithDbContextAsync(async db =>
         {
             var migrator = db.GetService<IMigrator>();
-            await migrator.MigrateAsync("20260813120000_AddFinanceUpdatedAtConcurrency");
-
             await db.Database.ExecuteSqlRawAsync("""
                 INSERT INTO season (season_number) VALUES (810001);
 
