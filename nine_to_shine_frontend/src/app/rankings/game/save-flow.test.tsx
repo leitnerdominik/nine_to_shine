@@ -8,6 +8,7 @@ import EditRankedGamePage from './[id]/page';
 
 const mocks = vi.hoisted(() => ({
   router: { push: vi.fn() },
+  params: { id: '10' },
   getSeasons: vi.fn(),
   getUsers: vi.fn(),
   getGames: vi.fn(),
@@ -23,7 +24,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('next/navigation', () => ({
   useRouter: () => mocks.router,
-  useParams: () => ({ id: '10' }),
+  useParams: () => mocks.params,
 }));
 
 vi.mock('@/definitions/commands', () => ({
@@ -88,12 +89,24 @@ const rankingPointCases = [
 
 describe('ranked-game save flows', () => {
   beforeEach(() => {
+    mocks.params.id = '10';
     mocks.getSeasons.mockResolvedValue([season]);
     mocks.getUsers.mockResolvedValue([nina]);
     mocks.getGames.mockResolvedValue([game]);
     mocks.getGameById.mockResolvedValue(game);
     mocks.getRankings.mockResolvedValue([]);
     mocks.saveGameSnapshot.mockResolvedValue(game);
+  });
+
+  it('redirects a nonnumeric game ID to the admin game list', async () => {
+    mocks.params.id = 'not-a-number';
+
+    renderWithProviders(<EditRankedGamePage />);
+
+    await waitFor(() =>
+      expect(mocks.router.push).toHaveBeenCalledWith('/admincenter/game')
+    );
+    expect(mocks.getGameById).not.toHaveBeenCalled();
   });
 
   it('saves an existing unranked game with one snapshot request', async () => {

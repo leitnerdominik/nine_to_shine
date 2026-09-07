@@ -10,6 +10,7 @@ export const routes = {
   punishment: `/info/strafenkatalog`,
   constitution: `/info/verfassung`,
   admincenter: `/admincenter`,
+  adminGames: `/admincenter/game`,
   organizeduties: `/organizer-duties`,
   finances: `/finance`,
   financesGames: `/finance/games`,

@@ -37,6 +37,7 @@ import type {
 } from '@/definitions/types';
 import dayjs from 'dayjs';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { routes } from '@/common/routes';
 import {
   RANKING_POINTS_MAX,
   RANKING_POINTS_MIN,
@@ -102,7 +103,7 @@ export default function SpielBearbeitenPage() {
     (async () => {
       if (!Number.isFinite(gameId)) {
         enqueueSnackbar('Ungültige Spiel-ID.', { variant: 'error' });
-        router.push('/admincenter/spiele');
+        router.push(routes.adminGames);
         return;
       }
       try {
