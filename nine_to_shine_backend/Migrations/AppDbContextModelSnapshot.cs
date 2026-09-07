@@ -153,6 +153,12 @@ namespace NineToShineApi.Migrations
                         .HasColumnType("date")
                         .HasColumnName("duty_date");
 
+                    b.Property<bool>("IsManualOverride")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_manual_override");
+
                     b.Property<bool>("IsSkipped")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

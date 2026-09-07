@@ -61,6 +61,7 @@ type EditValues = {
   dutyDate: string;
   userId: number;
   isSkipped: boolean;
+  isManualOverride: boolean;
 };
 
 export default function OrganizerDutyPage() {
@@ -89,6 +90,7 @@ export default function OrganizerDutyPage() {
     dutyDate: '',
     userId: 0,
     isSkipped: false,
+    isManualOverride: false,
   });
 
   const fetchDuties = useCallback(async () => {
@@ -142,6 +144,7 @@ export default function OrganizerDutyPage() {
       dutyDate: dayjs(row.dutyDate).format('YYYY-MM-DD'),
       userId: row.userId ?? 0,
       isSkipped: row.isSkipped,
+      isManualOverride: row.isManualOverride,
     });
   };
 
@@ -172,8 +175,7 @@ export default function OrganizerDutyPage() {
 
     if (
       !editValues.seasonId ||
-      !editValues.dutyDate ||
-      (!editValues.isSkipped && !editValues.userId)
+      !editValues.dutyDate
     ) {
       enqueueSnackbar('Bitte alle Felder ausfuellen.', { variant: 'warning' });
       return;
@@ -186,6 +188,7 @@ export default function OrganizerDutyPage() {
         dutyDate: new Date(editValues.dutyDate).toISOString(),
         userId: editValues.userId || undefined,
         isSkipped: editValues.isSkipped,
+        isManualOverride: editValues.isManualOverride,
       });
 
       await fetchDuties();
@@ -577,21 +580,28 @@ export default function OrganizerDutyPage() {
                 <TextField
                   select
                   label="Organisator"
-                  value={editValues.userId || ''}
-                  onChange={(e) =>
+                  value={editValues.userId}
+                  onChange={(e) => {
+                    const userId = Number(e.target.value);
                     setEditValues((current) => ({
                       ...current,
-                      userId: Number(e.target.value),
-                    }))
-                  }
+                      userId,
+                      isManualOverride: userId > 0,
+                    }));
+                  }}
                   disabled={loadingEditData || savingEdit}
                   fullWidth
                   helperText={
                     editValues.isSkipped
-                      ? 'Bei uebersprungenen Monaten wird kein Organisator angezeigt.'
-                      : 'Bei aktiver Rotation wird der Organisator aus der Reihenfolge berechnet.'
+                      ? 'Die Zuweisung bleibt erhalten, wird aber nicht angezeigt.'
+                      : 'Die Auswahl ueberschreibt die Rotation fuer diesen Monat.'
                   }
                 >
+                  <MenuItem value={0}>
+                    {editValues.isSkipped && editValues.isManualOverride
+                      ? 'Manuelle Zuweisung beibehalten'
+                      : 'Aus Rotation berechnen'}
+                  </MenuItem>
                   {users.map((u) => (
                     <MenuItem key={u.id} value={u.id}>
                       {u.displayName}
@@ -602,12 +612,17 @@ export default function OrganizerDutyPage() {
                   select
                   label="Status"
                   value={editValues.isSkipped ? 'skipped' : 'active'}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const isSkipped = e.target.value === 'skipped';
                     setEditValues((current) => ({
                       ...current,
-                      isSkipped: e.target.value === 'skipped',
-                    }))
-                  }
+                      isSkipped,
+                      isManualOverride:
+                        !isSkipped && current.userId === 0
+                          ? false
+                          : current.isManualOverride,
+                    }));
+                  }}
                   disabled={savingEdit}
                   fullWidth
                 >

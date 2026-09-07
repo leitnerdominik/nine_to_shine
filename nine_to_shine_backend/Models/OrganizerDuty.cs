@@ -10,6 +10,8 @@ namespace NineToShineApi.Models
 
         public bool IsSkipped { get; set; }
 
+        public bool IsManualOverride { get; set; }
+
         [ForeignKey("UserId")]
         public long UserId { get; set; }
         public User User { get; set; } = null!;

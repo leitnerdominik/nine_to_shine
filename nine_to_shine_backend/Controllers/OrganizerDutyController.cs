@@ -97,6 +97,9 @@ namespace NineToShineApi.Controllers
             if (!ModelState.IsValid)
                 return ValidationProblem(ModelState);
 
+            if (body.IsManualOverride == true && !body.UserId.HasValue)
+                return BadRequest(new { error = "user_id is required for a manual override." });
+
             var season = await _db.Season
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Id == body.SeasonId, ct);
@@ -113,7 +116,8 @@ namespace NineToShineApi.Controllers
                 DutyDate = body.DutyDate.Date,
                 UserId = userId.Value,
                 SeasonId = body.SeasonId,
-                IsSkipped = body.IsSkipped
+                IsSkipped = body.IsSkipped,
+                IsManualOverride = body.IsManualOverride ?? body.UserId.HasValue
             };
 
             _db.OrganizerDuties.Add(entity);
@@ -222,11 +226,20 @@ namespace NineToShineApi.Controllers
             if (entity is null)
                 return NotFound();
 
+            var requestedUserId = body.UserId;
+            if (body.IsManualOverride == true && !requestedUserId.HasValue)
+            {
+                if (!entity.IsManualOverride)
+                    return BadRequest(new { error = "user_id is required for a manual override." });
+
+                requestedUserId = entity.UserId;
+            }
+
             var seasonExists = await _db.Season.AnyAsync(s => s.Id == body.SeasonId, ct);
             if (!seasonExists)
                 return BadRequest(new { error = "season_id not found." });
 
-            var userId = await ResolveDutyUserIdAsync(body.SeasonId, body.UserId, ct);
+            var userId = await ResolveDutyUserIdAsync(body.SeasonId, requestedUserId, ct);
             if (userId is null)
                 return BadRequest(new { error = "user_id not found and no rotation exists for this season." });
 
@@ -234,6 +247,7 @@ namespace NineToShineApi.Controllers
             entity.UserId = userId.Value;
             entity.SeasonId = body.SeasonId;
             entity.IsSkipped = body.IsSkipped;
+            entity.IsManualOverride = body.IsManualOverride ?? body.UserId.HasValue;
 
             await _db.SaveChangesAsync(ct);
 
@@ -437,9 +451,19 @@ namespace NineToShineApi.Controllers
                     if (rotation.Count > 0)
                     {
                         var activeIndex = activeIndexBySeason.GetValueOrDefault(duty.SeasonId);
-                        var member = rotation[activeIndex % rotation.Count];
-                        userId = member.UserId;
-                        userDisplayName = member.User.DisplayName;
+
+                        if (duty.IsManualOverride)
+                        {
+                            userId = duty.UserId;
+                            userDisplayName = duty.User.DisplayName;
+                        }
+                        else
+                        {
+                            var member = rotation[activeIndex % rotation.Count];
+                            userId = member.UserId;
+                            userDisplayName = member.User.DisplayName;
+                        }
+
                         activeIndexBySeason[duty.SeasonId] = activeIndex + 1;
                     }
                     else
@@ -456,7 +480,8 @@ namespace NineToShineApi.Controllers
                     userDisplayName,
                     duty.SeasonId,
                     duty.Season.SeasonNumber,
-                    duty.IsSkipped
+                    duty.IsSkipped,
+                    duty.IsManualOverride
                 ));
             }
 
@@ -471,7 +496,8 @@ namespace NineToShineApi.Controllers
         string? UserDisplayName,
         long SeasonId,
         int SeasonDisplayNumber,
-        bool IsSkipped
+        bool IsSkipped,
+        bool IsManualOverride
     );
 
     public record OrganizerRotationMemberDto(
@@ -495,6 +521,8 @@ namespace NineToShineApi.Controllers
         public long SeasonId { get; set; }
 
         public bool IsSkipped { get; set; }
+
+        public bool? IsManualOverride { get; set; }
     }
 
     public class UpdateOrganizerDutySkipRequest

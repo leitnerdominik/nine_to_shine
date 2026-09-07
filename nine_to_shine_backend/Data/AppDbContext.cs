@@ -130,6 +130,11 @@ namespace NineToShineApi.Data
                     .HasDefaultValue(false)
                     .IsRequired();
 
+                e.Property(x => x.IsManualOverride)
+                    .HasColumnName("is_manual_override")
+                    .HasDefaultValue(false)
+                    .IsRequired();
+
                 e.Property(x => x.UserId)
                     .HasColumnName("user_id")
                     .IsRequired();

@@ -72,6 +72,7 @@ export interface OrganizerDutyDto {
   seasonId: number;
   seasonDisplayNumber: number;
   isSkipped: boolean;
+  isManualOverride: boolean;
 }
 
 export interface CreateOrganizerDutyRequest {
@@ -79,6 +80,7 @@ export interface CreateOrganizerDutyRequest {
   userId?: number | null;
   seasonId: number;
   isSkipped?: boolean;
+  isManualOverride?: boolean;
 }
 
 export interface OrganizerRotationMemberDto {
