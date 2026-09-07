@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Box, Fab, Paper, Stack } from '@mui/material';
+import { useCallback, useEffect, useState } from 'react';
+import { Alert, Box, Button, Fab, Paper, Stack } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { useRouter } from 'next/navigation';
 
@@ -11,29 +11,62 @@ import LoadingSkeleton from '@/components/LoadingSkeleton';
 import TripCard from '@/components/TripCard';
 import { apiTrips } from '@/definitions/commands';
 import type { TripSummaryDto } from '@/definitions/types';
+import { toErrorMessage } from '@/definitions/api';
 
 export default function TripHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [trips, setTrips] = useState<TripSummaryDto[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setTrips(await apiTrips.getAll());
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      setTrips(await apiTrips.getAll());
+    } catch (err) {
+      setError(
+        `Urlaubsreisen konnten nicht geladen werden. ${toErrorMessage(err)}`
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
 
   if (loading) {
     return (
       <Layout>
         <LoadingSkeleton />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
+          <CustomTitle text="Urlaube" />
+          <Alert
+            severity="error"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => void fetchData()}
+              >
+                Erneut versuchen
+              </Button>
+            }
+          >
+            {error}
+          </Alert>
+        </Box>
       </Layout>
     );
   }

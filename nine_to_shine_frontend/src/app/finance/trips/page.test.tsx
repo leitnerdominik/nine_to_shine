@@ -63,4 +63,27 @@ describe('TripHistoryPage', () => {
 
     expect(mocks.push).toHaveBeenCalledWith('/finance/trips/42');
   });
+
+  it('shows an initial-load error instead of the empty state and retries', async () => {
+    const browser = userEvent.setup();
+    mocks.getTrips.mockRejectedValueOnce(new Error('API nicht erreichbar'));
+
+    renderWithProviders(<TripHistoryPage />);
+
+    expect(
+      await screen.findByText(
+        'Urlaubsreisen konnten nicht geladen werden. API nicht erreichbar'
+      )
+    ).toBeVisible();
+    expect(
+      screen.queryByText('Keine Urlaubsreisen gefunden.')
+    ).not.toBeInTheDocument();
+
+    await browser.click(
+      screen.getByRole('button', { name: 'Erneut versuchen' })
+    );
+
+    expect(await screen.findByRole('button', { name: 'First' })).toBeVisible();
+    expect(mocks.getTrips).toHaveBeenCalledTimes(2);
+  });
 });

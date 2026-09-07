@@ -1,5 +1,6 @@
 import React from 'react';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/test-utils';
 import BankAccountsPage from './page';
@@ -50,5 +51,30 @@ describe('BankAccountsPage', () => {
     expect(screen.getByText('25,00 €')).toBeInTheDocument();
     expect(screen.getByText('15,00 €')).toBeInTheDocument();
     expect(screen.getByText('10,00 €')).toBeInTheDocument();
+  });
+
+  it('shows an initial-load error instead of zero accounts and retries', async () => {
+    const browser = userEvent.setup();
+    mocks.getBalanceOverview.mockRejectedValueOnce(
+      new Error('API nicht erreichbar')
+    );
+
+    renderWithProviders(<BankAccountsPage />);
+
+    expect(
+      await screen.findByText(
+        'Konten konnten nicht geladen werden. API nicht erreichbar'
+      )
+    ).toBeVisible();
+    expect(screen.queryByText('Gesamtvermögen')).not.toBeInTheDocument();
+
+    await browser.click(
+      screen.getByRole('button', { name: 'Erneut versuchen' })
+    );
+
+    expect(await screen.findByText('Gesamtvermögen')).toBeVisible();
+    await waitFor(() =>
+      expect(mocks.getBalanceOverview).toHaveBeenCalledTimes(2)
+    );
   });
 });

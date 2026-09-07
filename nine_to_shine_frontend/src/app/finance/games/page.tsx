@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   Box,
+  Button,
   Card,
   CardActionArea,
   Typography,
@@ -20,28 +22,59 @@ import CustomTitle from '@/components/CustomTitle';
 import { apiGame } from '@/definitions/commands';
 import type { GameDto } from '@/definitions/types';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { toErrorMessage } from '@/definitions/api';
 
 export default function GamesListPage() {
   const [loading, setLoading] = useState(true);
   const [games, setGames] = useState<GameDto[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await apiGame.getGamesWithBookings();
+      setGames(data);
+    } catch (err) {
+      setError(`Spiele konnten nicht geladen werden. ${toErrorMessage(err)}`);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const data = await apiGame.getGamesWithBookings();
-        setGames(data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+    void fetchData();
+  }, [fetchData]);
 
   if (loading) {
     return (
       <Layout>
         <LoadingSkeleton />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
+          <CustomTitle text="Spiele Übersicht" />
+          <Alert
+            severity="error"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => void fetchData()}
+              >
+                Erneut versuchen
+              </Button>
+            }
+          >
+            {error}
+          </Alert>
+        </Box>
       </Layout>
     );
   }

@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   Box,
+  Button,
   Card,
   CardContent,
   Typography,
@@ -20,6 +22,7 @@ import CustomTitle from '@/components/CustomTitle';
 import { apiFinance } from '@/definitions/commands';
 import { formatCurrency, stringAvatar, stringToColor } from '@/common/misc';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import { toErrorMessage } from '@/definitions/api';
 
 // --- Component Data Types ---
 interface AccountData {
@@ -33,60 +36,91 @@ export default function BankAccountsPage() {
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
   const [accounts, setAccounts] = useState<AccountData[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const overview = await apiFinance.getBalanceOverview();
+
+      const totalAccount: AccountData = {
+        id: 'total',
+        title: 'Gesamtvermögen',
+        balance: overview.globalBalance,
+        variant: 'total',
+      };
+
+      const clubAccount: AccountData = {
+        id: 'club',
+        title: 'Vereinskasse',
+        balance: overview.clubBalance,
+        variant: 'club',
+      };
+
+      const travelAccount: AccountData = {
+        id: 'reise-kasse',
+        title: 'Reise Kasse',
+        balance: overview.membersBalance,
+        variant: 'travel',
+      };
+
+      const userAccounts: AccountData[] = overview.userBalances.map(
+        ({ userId, displayName, balance }) => ({
+          id: userId.toString(),
+          title: displayName,
+          balance,
+          variant: 'user',
+        })
+      );
+
+      setAccounts([
+        totalAccount,
+        travelAccount,
+        clubAccount,
+        ...userAccounts,
+      ]);
+    } catch (err) {
+      setError(`Konten konnten nicht geladen werden. ${toErrorMessage(err)}`);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const overview = await apiFinance.getBalanceOverview();
-
-        const totalAccount: AccountData = {
-          id: 'total',
-          title: 'Gesamtvermögen',
-          balance: overview.globalBalance,
-          variant: 'total',
-        };
-
-        const clubAccount: AccountData = {
-          id: 'club',
-          title: 'Vereinskasse',
-          balance: overview.clubBalance,
-          variant: 'club',
-        };
-
-        const travelAccount: AccountData = {
-          id: 'reise-kasse',
-          title: 'Reise Kasse',
-          balance: overview.membersBalance,
-          variant: 'travel',
-        };
-
-        const userAccounts: AccountData[] = overview.userBalances.map(
-          ({ userId, displayName, balance }) => ({
-            id: userId.toString(),
-            title: displayName,
-            balance,
-            variant: 'user',
-          })
-        );
-
-        setAccounts([
-          totalAccount,
-          travelAccount,
-          clubAccount,
-          ...userAccounts,
-        ]);
-      } catch (err) {
-        console.error('Fehler beim Laden der Konten:', err);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+    void fetchData();
+  }, [fetchData]);
 
   if (loading) {
     return (
       <Layout>
         <LoadingSkeleton />
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
+          <CustomTitle text="Kontenübersicht" />
+          <Alert
+            severity="error"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => void fetchData()}
+              >
+                Erneut versuchen
+              </Button>
+            }
+            sx={{ mt: 2 }}
+          >
+            {error}
+          </Alert>
+        </Box>
       </Layout>
     );
   }

@@ -36,7 +36,7 @@ import CustomTitle from '@/components/CustomTitle';
 import { apiFinance, apiUsers } from '@/definitions/commands';
 import type { FinanceDto, UserDto } from '@/definitions/types';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
-import { isConflictError } from '@/definitions/api';
+import { isConflictError, toErrorMessage } from '@/definitions/api';
 
 // Helper für Währung
 const formatCurrency = (amount: number) =>
@@ -51,6 +51,8 @@ export default function TransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<FinanceDto[]>([]);
   const [users, setUsers] = useState<UserDto[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [usersError, setUsersError] = useState<string | null>(null);
 
   // --- Filter States ---
   const [filterUserId, setFilterUserId] = useState<number | ''>('');
@@ -65,6 +67,7 @@ export default function TransactionsPage() {
   // Daten laden
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       // API Params bauen - Typsicher
       const params: {
@@ -87,16 +90,30 @@ export default function TransactionsPage() {
       );
       setConflictError(null);
     } catch (err) {
-      console.error(err);
+      setLoadError(
+        `Buchungen konnten nicht geladen werden. ${toErrorMessage(err)}`
+      );
     } finally {
       setLoading(false);
     }
   }, [filterUserId, filterDirection]);
 
-  // Initial: User laden, dann Daten
-  useEffect(() => {
-    apiUsers.getAll().then(setUsers).catch(console.error);
+  const fetchUsers = useCallback(async () => {
+    setUsersError(null);
+
+    try {
+      setUsers(await apiUsers.getAll());
+    } catch (err) {
+      setUsersError(
+        `Mitglieder konnten nicht geladen werden. ${toErrorMessage(err)}`
+      );
+    }
   }, []);
+
+  // Initial: User laden
+  useEffect(() => {
+    void fetchUsers();
+  }, [fetchUsers]);
 
   // Reload bei Filter-Änderung
   useEffect(() => {
@@ -187,6 +204,42 @@ export default function TransactionsPage() {
             }
           >
             {conflictError}
+          </Alert>
+        )}
+
+        {loadError && (
+          <Alert
+            severity="error"
+            sx={{ mb: 3 }}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => void fetchData()}
+              >
+                Erneut versuchen
+              </Button>
+            }
+          >
+            {loadError}
+          </Alert>
+        )}
+
+        {usersError && (
+          <Alert
+            severity="error"
+            sx={{ mb: 3 }}
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => void fetchUsers()}
+              >
+                Mitglieder erneut laden
+              </Button>
+            }
+          >
+            {usersError}
           </Alert>
         )}
 
@@ -284,7 +337,7 @@ export default function TransactionsPage() {
         {/* --- TABELLE --- */}
         {loading ? (
           <LoadingSkeleton />
-        ) : (
+        ) : !loadError ? (
           <TableContainer component={Paper} variant="outlined">
             <Table>
               <TableHead sx={{ bgcolor: '#eee' }}>
@@ -415,7 +468,7 @@ export default function TransactionsPage() {
               </TableBody>
             </Table>
           </TableContainer>
-        )}
+        ) : null}
       </Box>
 
       {/* Delete Confirmation Dialog */}
