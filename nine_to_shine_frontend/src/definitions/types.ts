@@ -138,6 +138,19 @@ export interface GameDuesStatusDto {
   unpaidMembers: UnpaidDuesMemberDto[];
 }
 
+export interface UserBalanceDto {
+  userId: number;
+  displayName: string;
+  balance: number;
+}
+
+export interface BalanceOverviewDto {
+  globalBalance: number;
+  clubBalance: number;
+  membersBalance: number;
+  userBalances: UserBalanceDto[];
+}
+
 export interface CreateFinanceRequest {
   occurredAt?: string;
   direction: 'income' | 'expense';

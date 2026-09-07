@@ -76,6 +76,25 @@ describe('API command wrappers', () => {
     });
   });
 
+  it('loads the complete balance overview through one endpoint', async () => {
+    const overview = {
+      globalBalance: 95,
+      clubBalance: 70,
+      membersBalance: 25,
+      userBalances: [
+        { userId: 1, displayName: 'Nina', balance: 15 },
+        { userId: 2, displayName: 'Alex', balance: 10 },
+      ],
+    };
+    apiModule.api.get.mockResolvedValueOnce({ data: overview });
+
+    await expect(apiFinance.getBalanceOverview()).resolves.toEqual(overview);
+    expect(apiModule.api.get).toHaveBeenCalledOnce();
+    expect(apiModule.api.get).toHaveBeenCalledWith(
+      '/finance/balance/overview'
+    );
+  });
+
   it('atomically replaces game deposits', async () => {
     apiModule.api.put.mockResolvedValueOnce({ data: [] });
     const payload = {

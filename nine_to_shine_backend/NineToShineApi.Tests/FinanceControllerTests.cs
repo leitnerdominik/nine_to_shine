@@ -460,6 +460,38 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Balance_overview_returns_all_users_and_totals_in_one_response()
+    {
+        var nina = TestUser("Nina", "nina@example.test");
+        var alex = TestUser("Alex", "alex@example.test");
+        var userWithoutTransactions = TestUser("Bob", "bob@example.test");
+        userWithoutTransactions.IsActive = false;
+        await SeedAsync(nina, alex, userWithoutTransactions);
+        await SeedAsync(
+            TestFinance("income", 100m),
+            TestFinance("expense", 30m),
+            TestFinance("income", 20m, user: nina),
+            TestFinance("expense", 5m, user: nina),
+            TestFinance("income", 12m, user: alex),
+            TestFinance("expense", 2m, user: alex));
+
+        var overview = await Client.GetFromJsonAsync<BalanceOverviewDto>(
+            "/api/finance/balance/overview");
+
+        overview.Should().NotBeNull();
+        overview!.GlobalBalance.Should().Be(95m);
+        overview.ClubBalance.Should().Be(70m);
+        overview.MembersBalance.Should().Be(25m);
+        overview.UserBalances.Should().Equal(
+            new UserBalanceDto(nina.Id, nina.DisplayName, 15m),
+            new UserBalanceDto(alex.Id, alex.DisplayName, 10m),
+            new UserBalanceDto(
+                userWithoutTransactions.Id,
+                userWithoutTransactions.DisplayName,
+                0m));
+    }
+
+    [Fact]
     public async Task Dues_status_returns_played_games_and_only_counts_qualifying_member_payments()
     {
         var nina = TestUser("Nina", "nina@example.test");

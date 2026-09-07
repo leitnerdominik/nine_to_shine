@@ -149,6 +149,50 @@ namespace NineToShineApi.Controllers
             return Ok(result);
         }
 
+        // GET: api/finance/balance/overview
+        // Alle Kontenstände für die Übersicht in einer Antwort.
+        [HttpGet("balance/overview")]
+        public async Task<ActionResult<BalanceOverviewDto>> GetBalanceOverview(CancellationToken ct)
+        {
+            var users = await _db.Users
+                .AsNoTracking()
+                .OrderBy(u => u.Id)
+                .Select(u => new { u.Id, u.DisplayName })
+                .ToListAsync(ct);
+
+            var balancesByOwner = await _db.Finance
+                .AsNoTracking()
+                .GroupBy(f => f.UserId)
+                .Select(group => new
+                {
+                    UserId = group.Key,
+                    Balance = group.Sum(f =>
+                        f.Direction == "income" ? f.Amount : -f.Amount)
+                })
+                .ToListAsync(ct);
+
+            var memberBalancesByUserId = balancesByOwner
+                .Where(entry => entry.UserId.HasValue)
+                .ToDictionary(entry => entry.UserId!.Value, entry => entry.Balance);
+            var clubBalance = balancesByOwner
+                .Where(entry => !entry.UserId.HasValue)
+                .Select(entry => entry.Balance)
+                .SingleOrDefault();
+            var membersBalance = memberBalancesByUserId.Values.Sum();
+            var userBalances = users
+                .Select(user => new UserBalanceDto(
+                    user.Id,
+                    user.DisplayName,
+                    memberBalancesByUserId.GetValueOrDefault(user.Id)))
+                .ToList();
+
+            return Ok(new BalanceOverviewDto(
+                clubBalance + membersBalance,
+                clubBalance,
+                membersBalance,
+                userBalances));
+        }
+
         // GET: api/finance/balance/global
         // Der reale Kassenstand des Vereins (Alle Einnahmen - Alle Ausgaben)
         [HttpGet("balance/global")]
@@ -950,6 +994,19 @@ namespace NineToShineApi.Controllers
         int ActiveMemberCount,
         int PaidMemberCount,
         IReadOnlyList<UnpaidDuesMemberDto> UnpaidMembers
+    );
+
+    public record UserBalanceDto(
+        long UserId,
+        string DisplayName,
+        decimal Balance
+    );
+
+    public record BalanceOverviewDto(
+        decimal GlobalBalance,
+        decimal ClubBalance,
+        decimal MembersBalance,
+        IReadOnlyList<UserBalanceDto> UserBalances
     );
 
     public class CreateFinanceRequest

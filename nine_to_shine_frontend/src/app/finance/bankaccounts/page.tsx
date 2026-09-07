@@ -17,8 +17,7 @@ import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
 import SavingsIcon from '@mui/icons-material/Savings';
 import Layout from '@/components/Layout';
 import CustomTitle from '@/components/CustomTitle';
-import { apiFinance, apiUsers } from '@/definitions/commands';
-import { UserDto } from '@/definitions/types';
+import { apiFinance } from '@/definitions/commands';
 import { formatCurrency, stringAvatar, stringToColor } from '@/common/misc';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 
@@ -27,9 +26,7 @@ interface AccountData {
   id: string;
   title: string;
   balance: number;
-  clubOnlyBalance?: number;
   variant: 'total' | 'travel' | 'club' | 'user';
-  user?: UserDto;
 }
 
 export default function BankAccountsPage() {
@@ -40,53 +37,35 @@ export default function BankAccountsPage() {
   useEffect(() => {
     (async () => {
       try {
-        // 1. Initialdaten laden (User + Gesamtstand + Reise-/Vereinsstand)
-        const [users, globalBalance, membersBalance, clubBalance] =
-          await Promise.all([
-            apiUsers.getAll(),
-            apiFinance.getGlobalBalance(),
-            apiFinance.getMembersBalance(),
-            apiFinance.getClubBalance(),
-          ]);
-
-        // 2. Kontostände für alle User parallel abfragen
-        const userBalancePromises = users.map((u) =>
-          apiFinance.getUserBalance(u.id).then((balance) => ({
-            user: u,
-            balance,
-          }))
-        );
-
-        const userBalances = await Promise.all(userBalancePromises);
+        const overview = await apiFinance.getBalanceOverview();
 
         const totalAccount: AccountData = {
           id: 'total',
           title: 'Gesamtvermögen',
-          balance: globalBalance,
+          balance: overview.globalBalance,
           variant: 'total',
         };
 
         const clubAccount: AccountData = {
           id: 'club',
           title: 'Vereinskasse',
-          balance: clubBalance,
+          balance: overview.clubBalance,
           variant: 'club',
         };
 
         const travelAccount: AccountData = {
           id: 'reise-kasse',
           title: 'Reise Kasse',
-          balance: membersBalance,
+          balance: overview.membersBalance,
           variant: 'travel',
         };
 
-        const userAccounts: AccountData[] = userBalances.map(
-          ({ user, balance }) => ({
-            id: user.id.toString(),
-            title: user.displayName,
-            balance: balance,
+        const userAccounts: AccountData[] = overview.userBalances.map(
+          ({ userId, displayName, balance }) => ({
+            id: userId.toString(),
+            title: displayName,
+            balance,
             variant: 'user',
-            user: user,
           })
         );
 

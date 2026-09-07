@@ -31,6 +31,7 @@ import {
   GenerateOrganizerDutiesResponse,
   TripDetailsDto,
   TripSummaryDto,
+  BalanceOverviewDto,
 } from './types';
 
 /**
@@ -418,6 +419,17 @@ export const apiFinance = {
   async getGlobalBalance(): Promise<number> {
     try {
       const { data } = await api.get<number>('/finance/balance/global');
+      return data;
+    } catch (e) {
+      throw new Error(toErrorMessage(e));
+    }
+  },
+
+  async getBalanceOverview(): Promise<BalanceOverviewDto> {
+    try {
+      const { data } = await api.get<BalanceOverviewDto>(
+        '/finance/balance/overview'
+      );
       return data;
     } catch (e) {
       throw new Error(toErrorMessage(e));
