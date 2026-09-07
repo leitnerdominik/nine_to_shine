@@ -349,14 +349,14 @@ namespace NineToShineApi.Controllers
         [Display(Name = "user_id")]
         public long UserId { get; set; }
 
-        [Range(0, int.MaxValue)]
+        [Range(Ranking.MinimumPoints, Ranking.MaximumPoints)]
         public int Points { get; set; }
         public bool? IsPresent { get; set; }
     }
 
     public class UpdateRankingRequest
     {
-        [Range(0, 10)]
+        [Range(Ranking.MinimumPoints, Ranking.MaximumPoints)]
         public int Points { get; set; }
 
         public bool? IsPresent { get; set; }
@@ -393,7 +393,7 @@ namespace NineToShineApi.Controllers
         [Display(Name = "user_id")]
         public long UserId { get; set; }
 
-        [Range(0, int.MaxValue)]
+        [Range(Ranking.MinimumPoints, Ranking.MaximumPoints)]
         public int Points { get; set; }
 
         [Required]

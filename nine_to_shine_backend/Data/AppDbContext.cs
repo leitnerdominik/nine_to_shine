@@ -84,7 +84,9 @@ namespace NineToShineApi.Data
             {
                 e.ToTable("rankings", tb =>
                 {
-                    tb.HasCheckConstraint("ck_rank_points_nonneg", "points >= 0");
+                    tb.HasCheckConstraint(
+                        "ck_rank_points_range",
+                        $"points >= {Ranking.MinimumPoints} AND points <= {Ranking.MaximumPoints}");
                 });
 
                 e.HasKey(x => x.Id);

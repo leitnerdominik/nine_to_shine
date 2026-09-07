@@ -79,6 +79,13 @@ const ranking = {
   isPresent: true,
 };
 
+const rankingPointCases = [
+  { input: '0', expected: 0, error: null },
+  { input: '10', expected: 10, error: null },
+  { input: '-1', expected: null, error: 'Mindestens 0 Punkte.' },
+  { input: '11', expected: null, error: 'Maximal 10 Punkte.' },
+] as const;
+
 describe('ranked-game save flows', () => {
   beforeEach(() => {
     mocks.getSeasons.mockResolvedValue([season]);
@@ -172,4 +179,68 @@ describe('ranked-game save flows', () => {
     expect(mocks.createRanking).not.toHaveBeenCalled();
     expect(mocks.router.push).toHaveBeenCalledWith('/rankings/10');
   });
+
+  it.each(rankingPointCases)(
+    'validates $input points in the create form',
+    async ({ input, expected, error }) => {
+      const browser = userEvent.setup();
+      renderWithProviders(<NewRankedGamePage />);
+
+      const selects = await screen.findAllByRole('combobox');
+      await browser.click(selects[0]);
+      await browser.click(screen.getByRole('option', { name: 'Tennis – Nina' }));
+
+      const points = screen.getByRole('spinbutton', { name: 'Punkte' });
+      expect(points).toHaveAttribute('min', '0');
+      expect(points).toHaveAttribute('max', '10');
+      await browser.clear(points);
+      await browser.type(points, input);
+      await browser.click(screen.getByRole('button', { name: 'Speichern' }));
+
+      if (error) {
+        expect(await screen.findByText(error)).toBeInTheDocument();
+        expect(mocks.saveGameSnapshot).not.toHaveBeenCalled();
+        return;
+      }
+
+      await waitFor(() =>
+        expect(mocks.saveGameSnapshot).toHaveBeenCalledWith(
+          expect.objectContaining({
+            rankings: [{ userId: 1, points: expected, isPresent: true }],
+          })
+        )
+      );
+    }
+  );
+
+  it.each(rankingPointCases)(
+    'validates $input points in the edit form',
+    async ({ input, expected, error }) => {
+      const browser = userEvent.setup();
+      mocks.getRankings.mockResolvedValueOnce([ranking]);
+      renderWithProviders(<EditRankedGamePage />);
+
+      await screen.findByRole('heading', { name: 'Spiel bearbeiten: Tennis' });
+      const points = screen.getByRole('spinbutton', { name: 'Punkte' });
+      expect(points).toHaveAttribute('min', '0');
+      expect(points).toHaveAttribute('max', '10');
+      await browser.clear(points);
+      await browser.type(points, input);
+      await browser.click(screen.getByRole('button', { name: 'Speichern' }));
+
+      if (error) {
+        expect(await screen.findByText(error)).toBeInTheDocument();
+        expect(mocks.saveGameSnapshot).not.toHaveBeenCalled();
+        return;
+      }
+
+      await waitFor(() =>
+        expect(mocks.saveGameSnapshot).toHaveBeenCalledWith(
+          expect.objectContaining({
+            rankings: [{ userId: 1, points: expected, isPresent: true }],
+          })
+        )
+      );
+    }
+  );
 });

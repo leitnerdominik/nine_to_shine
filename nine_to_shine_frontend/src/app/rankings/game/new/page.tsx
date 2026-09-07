@@ -37,15 +37,17 @@ import type {
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import {
+  RANKING_POINTS_MAX,
+  RANKING_POINTS_MIN,
+  rankingPointsInputSchema,
+} from '@/schema/ranking';
 
 // Zod-Schema
 const entrySchema = z.object({
   userId: z.number().int().min(1, 'Ungültiger Spieler.'),
   isPresent: z.boolean(),
-  points: z.preprocess(
-    (v) => (v === '' || v === null ? undefined : v), // leeres Feld => "fehlt"
-    z.coerce.number().int('Nur ganze Zahlen.').min(1, 'Mindestens 1 Punkte.').max(9, 'Maximal 9 Punkte.')
-  ),
+  points: rankingPointsInputSchema,
 });
 
 const schema = z.object({
@@ -391,7 +393,8 @@ export default function SpielNeuPage() {
                     helperText={errors.entries?.[idx]?.points?.message}
                     slotProps={{
                       htmlInput: {
-                        min: 0,
+                        min: RANKING_POINTS_MIN,
+                        max: RANKING_POINTS_MAX,
                         inputMode: 'numeric',
                         pattern: '[0-9]*',
                       },

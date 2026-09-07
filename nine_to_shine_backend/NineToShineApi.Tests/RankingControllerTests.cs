@@ -17,7 +17,7 @@ public sealed class RankingControllerTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Create_rejects_missing_refs_duplicate_rankings_and_negative_points()
+    public async Task Create_rejects_missing_refs_and_duplicate_rankings()
     {
         var user = TestUser();
         var season = TestSeason();
@@ -31,14 +31,6 @@ public sealed class RankingControllerTests : IntegrationTestBase
             points = 3
         });
         missingGame.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-
-        var negativePoints = await Client.PostAsJsonAsync("/api/ranking", new
-        {
-            gameId = game.Id,
-            userId = user.Id,
-            points = -1
-        });
-        negativePoints.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         var created = await Client.PostAsJsonAsync("/api/ranking", new
         {
@@ -57,6 +49,39 @@ public sealed class RankingControllerTests : IntegrationTestBase
         duplicate.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
+    [Theory]
+    [InlineData(0, HttpStatusCode.Created)]
+    [InlineData(10, HttpStatusCode.Created)]
+    [InlineData(-1, HttpStatusCode.BadRequest)]
+    [InlineData(11, HttpStatusCode.BadRequest)]
+    public async Task Create_enforces_ranking_points_range(
+        int points,
+        HttpStatusCode expectedStatus)
+    {
+        var user = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, user);
+        await SeedAsync(user, season, game);
+
+        var response = await Client.PostAsJsonAsync("/api/ranking", new
+        {
+            gameId = game.Id,
+            userId = user.Id,
+            points
+        });
+
+        response.StatusCode.Should().Be(expectedStatus);
+
+        var persistedPoints = await WithDbContextAsync(db => db.Rankings
+            .AsNoTracking()
+            .Select(ranking => (int?)ranking.Points)
+            .SingleOrDefaultAsync());
+        if (expectedStatus == HttpStatusCode.Created)
+            persistedPoints.Should().Be(points);
+        else
+            persistedPoints.Should().BeNull();
+    }
+
     [Fact]
     public async Task Top_ranked_sums_points_for_selected_season_and_empty_returns_null()
     {
@@ -70,7 +95,7 @@ public sealed class RankingControllerTests : IntegrationTestBase
         await SeedAsync(
             TestRanking(seasonOneGame.Id, nina.Id, 4),
             TestRanking(seasonOneGame.Id, alex.Id, 7),
-            TestRanking(seasonTwoGame.Id, nina.Id, 100));
+            TestRanking(seasonTwoGame.Id, nina.Id, 10));
 
         var top = await Client.GetFromJsonAsync<TopRankedDto>(
             $"/api/ranking/top?seasonId={seasonOne.Id}");
@@ -84,8 +109,14 @@ public sealed class RankingControllerTests : IntegrationTestBase
         empty.Should().BeNull();
     }
 
-    [Fact]
-    public async Task Update_validates_points_range_and_delete_by_game_is_idempotent()
+    [Theory]
+    [InlineData(0, HttpStatusCode.OK)]
+    [InlineData(10, HttpStatusCode.OK)]
+    [InlineData(-1, HttpStatusCode.BadRequest)]
+    [InlineData(11, HttpStatusCode.BadRequest)]
+    public async Task Update_enforces_ranking_points_range(
+        int points,
+        HttpStatusCode expectedStatus)
     {
         var user = TestUser();
         var season = TestSeason();
@@ -95,25 +126,90 @@ public sealed class RankingControllerTests : IntegrationTestBase
 
         var ranking = await WithDbContextAsync(db => db.Rankings.AsNoTracking().SingleAsync());
 
-        var invalidUpdate = await Client.PutAsJsonAsync($"/api/ranking/{ranking.Id}", new
+        var response = await Client.PutAsJsonAsync($"/api/ranking/{ranking.Id}", new
         {
-            points = 11,
+            points,
             isPresent = false
         });
-        invalidUpdate.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        var validUpdate = await Client.PutAsJsonAsync($"/api/ranking/{ranking.Id}", new
+        response.StatusCode.Should().Be(expectedStatus);
+
+        var persisted = await WithDbContextAsync(db => db.Rankings
+            .AsNoTracking()
+            .SingleAsync());
+        if (expectedStatus == HttpStatusCode.OK)
         {
-            points = 10,
-            isPresent = false
-        });
-        validUpdate.StatusCode.Should().Be(HttpStatusCode.OK);
+            persisted.Points.Should().Be(points);
+            persisted.IsPresent.Should().BeFalse();
+        }
+        else
+        {
+            persisted.Points.Should().Be(5);
+            persisted.IsPresent.Should().BeTrue();
+        }
+    }
+
+    [Fact]
+    public async Task Delete_by_game_is_idempotent()
+    {
+        var user = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, user);
+        await SeedAsync(user, season, game);
+        await SeedAsync(TestRanking(game.Id, user.Id, 5));
 
         var firstDelete = await Client.DeleteAsync($"/api/ranking/by-game/{game.Id}");
         var secondDelete = await Client.DeleteAsync($"/api/ranking/by-game/{game.Id}");
 
         firstDelete.StatusCode.Should().Be(HttpStatusCode.NoContent);
         secondDelete.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Theory]
+    [InlineData(0, HttpStatusCode.OK)]
+    [InlineData(10, HttpStatusCode.OK)]
+    [InlineData(-1, HttpStatusCode.BadRequest)]
+    [InlineData(11, HttpStatusCode.BadRequest)]
+    public async Task Save_game_snapshot_enforces_ranking_points_range(
+        int points,
+        HttpStatusCode expectedStatus)
+    {
+        var user = TestUser();
+        var season = TestSeason();
+        await SeedAsync(user, season);
+
+        var response = await Client.PostAsJsonAsync("/api/ranking/game-snapshot", new
+        {
+            seasonId = season.Id,
+            playedAt = new DateTime(2026, 9, 7, 18, 0, 0, DateTimeKind.Utc),
+            gameName = "Tennis",
+            organizedByUserId = user.Id,
+            rankings = new[]
+            {
+                new { userId = user.Id, points, isPresent = true }
+            }
+        });
+
+        response.StatusCode.Should().Be(expectedStatus);
+
+        var persisted = await WithDbContextAsync(async db => new
+        {
+            Games = await db.Game.AsNoTracking().CountAsync(),
+            Points = await db.Rankings
+                .AsNoTracking()
+                .Select(ranking => (int?)ranking.Points)
+                .SingleOrDefaultAsync()
+        });
+        if (expectedStatus == HttpStatusCode.OK)
+        {
+            persisted.Games.Should().Be(1);
+            persisted.Points.Should().Be(points);
+        }
+        else
+        {
+            persisted.Games.Should().Be(0);
+            persisted.Points.Should().BeNull();
+        }
     }
 
     [Fact]

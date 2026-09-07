@@ -260,7 +260,7 @@ namespace NineToShineApi.Migrations
 
                     b.ToTable("rankings", null, t =>
                         {
-                            t.HasCheckConstraint("ck_rank_points_nonneg", "points >= 0");
+                            t.HasCheckConstraint("ck_rank_points_range", "points >= 0 AND points <= 10");
                         });
                 });
 
