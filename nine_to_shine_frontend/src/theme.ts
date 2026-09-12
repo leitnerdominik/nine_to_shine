@@ -1,32 +1,65 @@
-// theme.ts
 import { createTheme } from '@mui/material/styles';
 
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#0496FF', // Your primary color
+      main: '#0496FF',
+      contrastText: '#FFFFFF',
     },
     secondary: {
-      main: '#006BA6', // Your secondary color
+      main: '#006BA6',
     },
     text: {
-      primary: '#000',
-      secondary: '#888',
+      primary: '#07112F',
+      secondary: '#607091',
     },
+    background: {
+      default: '#F6FAFF',
+      paper: '#FFFFFF',
+    },
+    divider: '#DCE5F0',
   },
   typography: {
     fontFamily: 'Roboto, Arial, sans-serif',
-    // Customize other typography options as needed
+    h1: {
+      fontWeight: 800,
+      lineHeight: 1.08,
+      letterSpacing: '-0.03em',
+    },
+    h2: {
+      fontWeight: 800,
+      lineHeight: 1.1,
+      letterSpacing: '-0.025em',
+    },
+    h3: {
+      fontWeight: 800,
+      lineHeight: 1.12,
+      letterSpacing: '-0.02em',
+    },
+    h4: {
+      fontWeight: 700,
+      lineHeight: 1.2,
+      letterSpacing: '-0.015em',
+    },
+    h5: {
+      fontWeight: 600,
+      lineHeight: 1.25,
+    },
+    overline: {
+      fontWeight: 700,
+      lineHeight: 1.5,
+      letterSpacing: '0.12em',
+    },
   },
   components: {
     MuiInputLabel: {
       styleOverrides: {
-        root: {
-          color: 'rgba(0,0,0,0.6)', // unfocused label
-          '&.Mui-disabled': { color: 'rgba(0,0,0,0.38)' },
-          '&.Mui-focused': { color: '#0496FF' }, // focused label color
-          '&.Mui-error': { color: '#d32f2f' },
-        },
+        root: ({ theme }) => ({
+          color: theme.palette.text.secondary,
+          '&.Mui-disabled': { color: theme.palette.text.disabled },
+          '&.Mui-focused': { color: theme.palette.primary.main },
+          '&.Mui-error': { color: theme.palette.error.main },
+        }),
       },
     },
   },
