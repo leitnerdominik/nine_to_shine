@@ -309,8 +309,8 @@ namespace NineToShineApi.Controllers
             if (dir != "income" && dir != "expense")
                 return BadRequest(new { error = "Direction must be 'income' or 'expense'." });
 
-            if (body.Amount <= 0)
-                return BadRequest(new { error = "Amount must be greater than 0." });
+            if (!IsValidMoneyAmount(body.Amount, allowZero: false))
+                return BadRequest(new { error = "Amount must be greater than 0 and have at most two decimal places." });
 
             if (body.UserId.HasValue)
             {
@@ -460,6 +460,9 @@ namespace NineToShineApi.Controllers
             if (!body.SeasonId.HasValue)
                 return BadRequest(new { error = "seasonId is required." });
 
+            if (body.Items.Any(item => !IsValidMoneyAmount(item.Amount, allowZero: false)))
+                return BadRequest(new { error = "Expense amounts must be greater than 0 and have at most two decimal places." });
+
             var seasonExists = await _db.Season.AnyAsync(s => s.Id == body.SeasonId.Value, ct);
             if (!seasonExists) return BadRequest(new { error = "season_id not found." });
 
@@ -519,8 +522,8 @@ namespace NineToShineApi.Controllers
             if (dir != "income" && dir != "expense")
                 return BadRequest(new { error = "Direction must be 'income' or 'expense'." });
 
-            if (body.Amount <= 0)
-                return BadRequest(new { error = "Amount must be greater than 0." });
+            if (!IsValidMoneyAmount(body.Amount, allowZero: false))
+                return BadRequest(new { error = "Amount must be greater than 0 and have at most two decimal places." });
 
             if (body.UserId.HasValue)
             {

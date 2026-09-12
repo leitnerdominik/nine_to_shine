@@ -367,6 +367,55 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Finance_writes_reject_sub_cent_amounts_without_changing_persisted_rows()
+    {
+        var season = TestSeason();
+        await SeedAsync(season);
+        var existing = TestFinance("income", 25m, "DUES", seasonId: season.Id);
+        await SeedAsync(existing);
+
+        var createResponse = await Client.PostAsJsonAsync("/api/finance", new
+        {
+            direction = "expense",
+            amount = 1.005m,
+            category = "OTHER",
+            seasonId = season.Id
+        });
+        createResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await createResponse.Content.ReadAsStringAsync())
+            .Should().Contain("greater than 0 and have at most two decimal places");
+
+        var updateResponse = await Client.PutAsJsonAsync($"/api/finance/{existing.Id}", new
+        {
+            updatedAt = existing.UpdatedAt,
+            direction = "income",
+            amount = 1.005m,
+            category = "DUES",
+            seasonId = season.Id
+        });
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var expenseBatchResponse = await Client.PostAsJsonAsync("/api/finance/expenses/batch", new
+        {
+            occurredAt = DateTime.UtcNow,
+            seasonId = season.Id,
+            items = new[]
+            {
+                new { amount = 12.50m, description = "Valid" },
+                new { amount = 1.005m, description = "Sub-cent" }
+            }
+        });
+        expenseBatchResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .ToListAsync());
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(existing.Id);
+        rows[0].Amount.Should().Be(25m);
+    }
+
+    [Fact]
     public async Task Create_batches_roll_back_when_save_fails_after_database_writes()
     {
         var nina = TestUser();
