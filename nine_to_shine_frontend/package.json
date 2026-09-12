@@ -35,13 +35,13 @@
     "@types/node": "^20.19.43",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^8",
     "eslint-config-next": "15.5.25",
     "jsdom": "^29.1.1",
     "msw": "^2.14.6",
     "typescript": "^5",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "postcss": "8.5.28"
