@@ -130,17 +130,28 @@ const RankingsPage = () => {
   // Totals pro Spieler für die ausgewählte Saison:
   // Summe aller Ranking.points der Games, die zu dieser Saison gehören.
   const totalsForSeason = useMemo(() => {
-    const totals = new Map<string, number>(); // key: displayName
+    const totals = new Map<
+      number,
+      { userId: number; displayName: string; points: number }
+    >();
     const gameIdInSeason = new Set<number>(
       gamesOfSelectedSeason.map((g) => g.id)
     );
     for (const r of rankings) {
       if (!gameIdInSeason.has(r.gameId)) continue;
-      const name = userNameById.get(r.userId) ?? `#${r.userId}`;
-      totals.set(name, (totals.get(name) ?? 0) + r.points);
+      const existing = totals.get(r.userId);
+      if (existing) {
+        existing.points += r.points;
+      } else {
+        totals.set(r.userId, {
+          userId: r.userId,
+          displayName: userNameById.get(r.userId) ?? `#${r.userId}`,
+          points: r.points,
+        });
+      }
     }
     // sortiert (desc)
-    return Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
+    return Array.from(totals.values()).sort((a, b) => b.points - a.points);
   }, [rankings, gamesOfSelectedSeason, userNameById]);
 
   // Für die Spiele-Kacheln (wie früher EntryTile): Datum + Titel
@@ -272,11 +283,11 @@ const RankingsPage = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {totalsForSeason.map(([name, sum], idx) => {
+                  {totalsForSeason.map((total, idx) => {
                     const { iconColor, bgColor } = getRankStyle(idx);
                     return (
                       <TableRow
-                        key={name}
+                        key={total.userId}
                         sx={{
                           backgroundColor: bgColor,
                           '&:hover': {
@@ -300,12 +311,12 @@ const RankingsPage = () => {
                         </TableCell>
                         <TableCell>
                           <Typography fontWeight={idx < 3 ? 'bold' : 'normal'}>
-                            {name}
+                            {total.displayName}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           <Typography fontWeight={idx < 3 ? 'bold' : 'normal'}>
-                            {sum}
+                            {total.points}
                           </Typography>
                         </TableCell>
                       </TableRow>
