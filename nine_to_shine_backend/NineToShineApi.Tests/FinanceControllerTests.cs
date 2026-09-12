@@ -712,7 +712,8 @@ public sealed class FinanceControllerTests : IntegrationTestBase
                 {
                     Version(memberDues),
                     Version(clubDues),
-                    Version(oldOtherIncome)
+                    Version(oldOtherIncome),
+                    Version(concurrentOtherIncome)
                 },
                 occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
                 members = new[]
@@ -741,12 +742,12 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             .OrderBy(finance => finance.Id)
             .ToListAsync());
 
-        rows.Should().HaveCount(6);
+        rows.Should().HaveCount(5);
         rows.Should().NotContain(finance =>
             finance.Id == memberDues.Id ||
             finance.Id == clubDues.Id ||
             finance.Id == oldOtherIncome.Id);
-        rows.Should().Contain(finance => finance.Id == concurrentOtherIncome.Id);
+        rows.Should().NotContain(finance => finance.Id == concurrentOtherIncome.Id);
         rows.Should().Contain(finance => finance.Id == unrelatedIncome.Id);
         rows.Should().Contain(finance => finance.Id == expense.Id);
         rows.Should().Contain(finance =>
@@ -763,6 +764,53 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             finance.Category == "OTHER" &&
             finance.Amount == 7m &&
             finance.Description == "Restgeld");
+    }
+
+    [Fact]
+    public async Task Replace_game_deposits_conflicts_when_a_managed_row_is_added_after_editor_read()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, nina);
+        await SeedAsync(nina, season, game);
+
+        var originalDues = TestFinance("income", 30m, "DUES", user: nina, game: game);
+        await SeedAsync(originalDues);
+
+        var originalReference = Version(originalDues);
+        var addedDues = TestFinance("income", 20m, "DUES", user: nina, game: game);
+        await SeedAsync(addedDues);
+
+        var response = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactions = new[] { originalReference },
+                occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+                members = new[]
+                {
+                    new
+                    {
+                        userId = nina.Id,
+                        memberAmount = 60m,
+                        clubAmount = 0m,
+                        description = "Stale edit"
+                    }
+                },
+                otherIncomes = Array.Empty<object>()
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .OrderBy(finance => finance.Id)
+            .ToListAsync());
+        rows.Should().HaveCount(2);
+        rows.Should().Contain(finance =>
+            finance.Id == originalDues.Id && finance.Amount == 30m);
+        rows.Should().Contain(finance =>
+            finance.Id == addedDues.Id && finance.Amount == 20m);
     }
 
     [Fact]

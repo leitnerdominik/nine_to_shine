@@ -76,7 +76,6 @@ function BulkDepositForm() {
   const [editTransactions, setEditTransactions] = useState<
     FinanceVersionReference[]
   >([]);
-  const [unmatchedDuesCount, setUnmatchedDuesCount] = useState(0);
   const [blockingError, setBlockingError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [conflictError, setConflictError] = useState<string | null>(null);
@@ -145,7 +144,6 @@ function BulkDepositForm() {
         setLoading(true);
         setLoadError(null);
         setEditTransactions([]);
-        setUnmatchedDuesCount(0);
         setBlockingError(null);
         setConflictError(null);
 
@@ -180,7 +178,6 @@ function BulkDepositForm() {
             gameFinances
           );
           setEditTransactions(editData.transactions);
-          setUnmatchedDuesCount(editData.unmatchedDuesCount);
           setBlockingError(editData.blockingError ?? null);
           reset(editData.defaultValues);
           return;
@@ -447,17 +444,6 @@ function BulkDepositForm() {
             }
           >
             {conflictError}
-          </Alert>
-        )}
-
-        {unmatchedDuesCount > 0 && (
-          <Alert severity="info" sx={{ mb: 3 }}>
-            {unmatchedDuesCount}{' '}
-            {unmatchedDuesCount === 1
-              ? 'älterer Vereinsbeitrag konnte'
-              : 'ältere Vereinsbeiträge konnten'}{' '}
-            keinem Mitglied eindeutig zugeordnet werden und{' '}
-            {unmatchedDuesCount === 1 ? 'bleibt' : 'bleiben'} unverändert.
           </Alert>
         )}
 

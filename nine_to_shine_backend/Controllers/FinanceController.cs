@@ -767,6 +767,20 @@ namespace NineToShineApi.Controllers
                 });
             }
 
+            // The request is a complete optimistic snapshot.  Once the game
+            // aggregate is locked, include every currently managed row in the
+            // version check so rows added after the editor loaded are detected.
+            var managedTransactions = await _db.Finance
+                .Where(finance =>
+                    finance.GameId == gameId &&
+                    finance.Direction == "income" &&
+                    (finance.Category == "DUES" ||
+                     (finance.Category == "OTHER" && finance.UserId == null)))
+                .ToListAsync(ct);
+
+            if (!VersionsMatch(managedTransactions, body.Transactions))
+                return FinanceConflict();
+
             var created = CreateDepositRows(
                 body.OccurredAt.Value,
                 game.SeasonId,
@@ -777,8 +791,8 @@ namespace NineToShineApi.Controllers
 
             try
             {
-                if (existingTransactions.Count > 0)
-                    _db.Finance.RemoveRange(existingTransactions);
+                if (managedTransactions.Count > 0)
+                    _db.Finance.RemoveRange(managedTransactions);
                 if (created.Count > 0)
                     _db.Finance.AddRange(created);
 
