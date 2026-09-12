@@ -1,7 +1,9 @@
+using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using NineToShineApi.Controllers;
 using NineToShineApi.Tests.Support;
 using Npgsql;
 
@@ -10,6 +12,7 @@ namespace NineToShineApi.Tests;
 public sealed class MigrationUpgradeTests : IntegrationTestBase
 {
     private const string BeforeOrganizerRotation = "20251217113609_RemovePenaltyTable";
+    private const string BeforeHistoricalOrganizerReconciliation = "20260907120000_EnforceRankingPointsRange";
     private const string BeforeFinanceConcurrency = "20260522090629_AddOrganizerRotation";
 
     public MigrationUpgradeTests(PostgresFixture postgres) : base(postgres)
@@ -17,7 +20,7 @@ public sealed class MigrationUpgradeTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Organizer_rotation_migration_preserves_duties_and_backfills_members()
+    public async Task Organizer_history_reconciliation_preserves_non_cyclic_assignments_in_api_dtos()
     {
         await Factory.ResetDatabaseAsync(BeforeOrganizerRotation);
 
@@ -40,14 +43,17 @@ public sealed class MigrationUpgradeTests : IntegrationTestBase
 
                 INSERT INTO organizer_duty (id, duty_date, user_id, season_id)
                 VALUES
-                    (922001, '2026-01-10',
+                    (922001, '2026-01-05',
                      (SELECT id FROM users WHERE email = 'migration-nina@example.test'),
                      (SELECT id FROM season WHERE season_number = 820001)),
-                    (922002, '2026-01-05',
+                    (922002, '2026-02-05',
+                     (SELECT id FROM users WHERE email = 'migration-nina@example.test'),
+                     (SELECT id FROM season WHERE season_number = 820001)),
+                    (922003, '2026-03-05',
                      (SELECT id FROM users WHERE email = 'migration-alex@example.test'),
                      (SELECT id FROM season WHERE season_number = 820001)),
-                    (922003, '2026-02-07',
-                     (SELECT id FROM users WHERE email = 'migration-alex@example.test'),
+                    (922006, '2026-10-01',
+                     (SELECT id FROM users WHERE email = 'migration-nina@example.test'),
                      (SELECT id FROM season WHERE season_number = 820001)),
                     (922004, '2026-01-03',
                      (SELECT id FROM users WHERE email = 'migration-bea@example.test'),
@@ -57,7 +63,21 @@ public sealed class MigrationUpgradeTests : IntegrationTestBase
                      (SELECT id FROM season WHERE season_number = 820002));
                 """);
 
-            await db.GetService<IMigrator>().MigrateAsync();
+            var migrator = db.GetService<IMigrator>();
+            await migrator.MigrateAsync(BeforeHistoricalOrganizerReconciliation);
+            db.ChangeTracker.Clear();
+
+            appliedMigrations = await db.Database.GetAppliedMigrationsAsync();
+            appliedMigrations.Last().Should().Be(BeforeHistoricalOrganizerReconciliation);
+
+            var brokenDtos = await Client.GetFromJsonAsync<List<OrganizerDutyDto>>("/api/OrganizerDuty");
+            brokenDtos.Should().NotBeNull();
+            brokenDtos!
+                .Where(duty => duty.SeasonId == 920001L)
+                .Select(duty => duty.UserId)
+                .Should().Equal(921001L, 921002L, 921001L, 921002L);
+
+            await migrator.MigrateAsync();
             db.ChangeTracker.Clear();
 
             var duties = await db.OrganizerDuties
@@ -79,27 +99,36 @@ public sealed class MigrationUpgradeTests : IntegrationTestBase
                 [
                     new
                     {
-                        Id = 922002L,
-                        DutyDate = new DateTime(2026, 1, 5),
-                        UserId = 921002L,
-                        SeasonId = 920001L,
-                        IsSkipped = false,
-                        IsManualOverride = false
-                    },
-                    new
-                    {
                         Id = 922001L,
-                        DutyDate = new DateTime(2026, 1, 10),
+                        DutyDate = new DateTime(2026, 1, 5),
                         UserId = 921001L,
                         SeasonId = 920001L,
                         IsSkipped = false,
-                        IsManualOverride = false
+                        IsManualOverride = true
+                    },
+                    new
+                    {
+                        Id = 922002L,
+                        DutyDate = new DateTime(2026, 2, 5),
+                        UserId = 921001L,
+                        SeasonId = 920001L,
+                        IsSkipped = false,
+                        IsManualOverride = true
                     },
                     new
                     {
                         Id = 922003L,
-                        DutyDate = new DateTime(2026, 2, 7),
+                        DutyDate = new DateTime(2026, 3, 5),
                         UserId = 921002L,
+                        SeasonId = 920001L,
+                        IsSkipped = false,
+                        IsManualOverride = true
+                    },
+                    new
+                    {
+                        Id = 922006L,
+                        DutyDate = new DateTime(2026, 10, 1),
+                        UserId = 921001L,
                         SeasonId = 920001L,
                         IsSkipped = false,
                         IsManualOverride = false
@@ -111,7 +140,7 @@ public sealed class MigrationUpgradeTests : IntegrationTestBase
                         UserId = 921003L,
                         SeasonId = 920002L,
                         IsSkipped = false,
-                        IsManualOverride = false
+                        IsManualOverride = true
                     },
                     new
                     {
@@ -120,7 +149,7 @@ public sealed class MigrationUpgradeTests : IntegrationTestBase
                         UserId = 921004L,
                         SeasonId = 920002L,
                         IsSkipped = false,
-                        IsManualOverride = false
+                        IsManualOverride = true
                     }
                 ],
                 options => options.WithStrictOrdering());
@@ -144,17 +173,17 @@ public sealed class MigrationUpgradeTests : IntegrationTestBase
                     new
                     {
                         SeasonId = 920001L,
-                        UserId = 921002L,
+                        UserId = 921001L,
                         SeasonNumber = 820001,
-                        UserName = "Alex",
+                        UserName = "Nina",
                         SortOrder = 1
                     },
                     new
                     {
                         SeasonId = 920001L,
-                        UserId = 921001L,
+                        UserId = 921002L,
                         SeasonNumber = 820001,
-                        UserName = "Nina",
+                        UserName = "Alex",
                         SortOrder = 2
                     },
                     new
@@ -175,6 +204,41 @@ public sealed class MigrationUpgradeTests : IntegrationTestBase
                     }
                 ],
                 options => options.WithStrictOrdering());
+
+            var reconciledDtos = await Client.GetFromJsonAsync<List<OrganizerDutyDto>>("/api/OrganizerDuty");
+            reconciledDtos.Should().NotBeNull();
+            var reconciledSeasonDtos = reconciledDtos!
+                .Where(duty => duty.SeasonId == 920001L)
+                .ToList();
+            reconciledSeasonDtos.Select(duty => duty.UserId)
+                .Should().Equal(921001L, 921001L, 921002L, 921002L);
+            reconciledSeasonDtos.Select(duty => duty.IsManualOverride)
+                .Should().Equal(true, true, true, false);
+
+            await migrator.MigrateAsync(BeforeHistoricalOrganizerReconciliation);
+            db.ChangeTracker.Clear();
+
+            var assignmentsAfterDown = await db.OrganizerDuties
+                .AsNoTracking()
+                .Where(duty => duty.SeasonId == 920001L)
+                .OrderBy(duty => duty.DutyDate)
+                .Select(duty => new { duty.Id, duty.UserId, duty.IsManualOverride })
+                .ToListAsync();
+            assignmentsAfterDown.Select(duty => duty.UserId)
+                .Should().Equal(921001L, 921001L, 921002L, 921001L);
+            assignmentsAfterDown.Select(duty => duty.IsManualOverride)
+                .Should().Equal(true, true, true, false);
+
+            await migrator.MigrateAsync();
+            db.ChangeTracker.Clear();
+
+            var assignmentsAfterReapply = await db.OrganizerDuties
+                .AsNoTracking()
+                .Where(duty => duty.SeasonId == 920001L)
+                .OrderBy(duty => duty.DutyDate)
+                .Select(duty => new { duty.Id, duty.UserId, duty.IsManualOverride })
+                .ToListAsync();
+            assignmentsAfterReapply.Should().Equal(assignmentsAfterDown);
 
             var duplicateMember = async () => await db.Database.ExecuteSqlRawAsync("""
                 INSERT INTO organizer_rotation_member (season_id, user_id, sort_order)
