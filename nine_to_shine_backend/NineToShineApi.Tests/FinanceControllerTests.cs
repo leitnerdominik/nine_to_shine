@@ -19,6 +19,110 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Game_linked_finance_rejects_mismatched_seasons_atomically()
+    {
+        var user = TestUser();
+        var gameSeason = TestSeason(1);
+        var otherSeason = TestSeason(2);
+        var game = TestGame(gameSeason, user);
+        await SeedAsync(user, gameSeason, otherSeason, game);
+
+        async Task AssertMismatch(HttpResponseMessage response)
+        {
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            var body = await response.Content.ReadAsStringAsync();
+            body.Should().Contain("season_id must match game_id's season.");
+        }
+
+        await AssertMismatch(await Client.PostAsJsonAsync("/api/finance", new
+        {
+            direction = "expense", amount = 10m, category = "EVENT",
+            seasonId = otherSeason.Id, gameId = game.Id
+        }));
+
+        await AssertMismatch(await Client.PostAsJsonAsync("/api/finance/deposits/batch", new
+        {
+            occurredAt = DateTime.UtcNow, seasonId = otherSeason.Id, gameId = game.Id,
+            members = new[] { new { userId = user.Id, memberAmount = 10m, clubAmount = 0m } },
+            otherIncomes = Array.Empty<object>()
+        }));
+
+        await AssertMismatch(await Client.PostAsJsonAsync("/api/finance/expenses/batch", new
+        {
+            occurredAt = DateTime.UtcNow, seasonId = otherSeason.Id, gameId = game.Id,
+            items = new[] { new { amount = 10m, description = "bad season" } }
+        }));
+
+        var valid = await Client.PostAsJsonAsync("/api/finance", new
+        {
+            direction = "expense", amount = 11m, category = "EVENT", gameId = game.Id
+        });
+        valid.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await valid.Content.ReadFromJsonAsync<FinanceDto>();
+        created!.SeasonId.Should().Be(gameSeason.Id);
+
+        await AssertMismatch(await Client.PutAsJsonAsync($"/api/finance/{created.Id}", new
+        {
+            updatedAt = created.UpdatedAt, direction = "expense", amount = 12m,
+            category = "EVENT", seasonId = otherSeason.Id, gameId = game.Id
+        }));
+
+        var derivedUpdate = await Client.PutAsJsonAsync($"/api/finance/{created.Id}", new
+        {
+            updatedAt = created.UpdatedAt, direction = "expense", amount = 13m,
+            category = "EVENT", gameId = game.Id
+        });
+        derivedUpdate.StatusCode.Should().Be(HttpStatusCode.OK);
+        var updated = await derivedUpdate.Content.ReadFromJsonAsync<FinanceDto>();
+        updated!.SeasonId.Should().Be(gameSeason.Id);
+
+        var rows = await WithDbContextAsync(db => db.Finance.AsNoTracking().ToListAsync());
+        rows.Should().ContainSingle(row => row.Id == created.Id && row.SeasonId == gameSeason.Id && row.Amount == 13m);
+    }
+
+    [Fact]
+    public async Task Game_linked_create_waits_for_a_concurrent_season_move_and_uses_the_new_season()
+    {
+        var user = TestUser();
+        var originalSeason = TestSeason(1);
+        var replacementSeason = TestSeason(2);
+        var game = TestGame(originalSeason, user);
+        await SeedAsync(user, originalSeason, replacementSeason, game);
+
+        var connectionString = await WithDbContextAsync(db =>
+            Task.FromResult(db.Database.GetConnectionString()));
+        await using var connection = new NpgsqlConnection(connectionString!);
+        await connection.OpenAsync();
+        await using var moveTransaction = await connection.BeginTransactionAsync();
+        await using (var moveCommand = new NpgsqlCommand(
+            "UPDATE game SET season_id = @seasonId WHERE id = @gameId",
+            connection,
+            moveTransaction))
+        {
+            moveCommand.Parameters.AddWithValue("seasonId", replacementSeason.Id);
+            moveCommand.Parameters.AddWithValue("gameId", game.Id);
+            await moveCommand.ExecuteNonQueryAsync();
+        }
+
+        var createTask = Client.PostAsJsonAsync("/api/finance", new
+        {
+            direction = "expense",
+            amount = 10m,
+            category = "EVENT",
+            gameId = game.Id
+        });
+
+        await Task.Delay(100);
+        createTask.IsCompleted.Should().BeFalse();
+        await moveTransaction.CommitAsync();
+
+        var response = await createTask.WaitAsync(TimeSpan.FromSeconds(5));
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await response.Content.ReadFromJsonAsync<FinanceDto>();
+        created!.SeasonId.Should().Be(replacementSeason.Id);
+    }
+
+    [Fact]
     public async Task Create_validates_references_and_normalizes_category()
     {
         var user = TestUser();

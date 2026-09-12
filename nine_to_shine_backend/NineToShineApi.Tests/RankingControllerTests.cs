@@ -280,6 +280,38 @@ public sealed class RankingControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Save_game_snapshot_moves_booked_finance_to_new_season()
+    {
+        var user = TestUser();
+        var season = TestSeason(1);
+        var replacementSeason = TestSeason(2);
+        var game = TestGame(season, user);
+        await SeedAsync(user, season, replacementSeason, game);
+        var finance = TestFinance("expense", 20m, "EVENT", game: game);
+        await SeedAsync(finance);
+        var originalVersion = finance.UpdatedAt;
+
+        var response = await Client.PostAsJsonAsync("/api/ranking/game-snapshot", new
+        {
+            gameId = game.Id,
+            seasonId = replacementSeason.Id,
+            playedAt = game.PlayedAt,
+            gameName = game.GameName,
+            organizedByUserId = user.Id,
+            rankings = new[]
+            {
+                new { userId = user.Id, points = 5, isPresent = true }
+            }
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        var moved = await WithDbContextAsync(db => db.Finance.AsNoTracking().SingleAsync());
+        moved.SeasonId.Should().Be(replacementSeason.Id);
+        moved.GameId.Should().Be(game.Id);
+        moved.UpdatedAt.Should().BeAfter(originalVersion);
+    }
+
+    [Fact]
     public async Task Save_game_snapshot_rolls_back_metadata_and_rankings_when_a_ranking_fails()
     {
         var nina = TestUser();
@@ -288,9 +320,12 @@ public sealed class RankingControllerTests : IntegrationTestBase
         var replacementSeason = TestSeason(2);
         var game = TestGame(season, nina);
         await SeedAsync(nina, alex, season, replacementSeason, game);
+        var finance = TestFinance("expense", 20m, "EVENT", game: game);
         await SeedAsync(
             TestRanking(game.Id, nina.Id, 9),
-            TestRanking(game.Id, alex.Id, 4));
+            TestRanking(game.Id, alex.Id, 4),
+            finance);
+        var originalFinanceVersion = finance.UpdatedAt;
 
         var originalRankings = await WithDbContextAsync(db => db.Rankings
             .AsNoTracking()
@@ -351,7 +386,8 @@ public sealed class RankingControllerTests : IntegrationTestBase
                     ranking.Points,
                     ranking.IsPresent
                 })
-                .ToListAsync()
+                .ToListAsync(),
+            Finance = await db.Finance.AsNoTracking().SingleAsync()
         });
         persisted.Game.SeasonId.Should().Be(season.Id);
         persisted.Game.PlayedAt.Should().Be(
@@ -360,6 +396,8 @@ public sealed class RankingControllerTests : IntegrationTestBase
         persisted.Game.OrganizedByUserId.Should().Be(nina.Id);
         persisted.Rankings.Should().BeEquivalentTo(originalRankings, options =>
             options.WithStrictOrdering());
+        persisted.Finance.SeasonId.Should().Be(season.Id);
+        persisted.Finance.UpdatedAt.Should().Be(originalFinanceVersion);
     }
 
     [Fact]

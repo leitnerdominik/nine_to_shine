@@ -97,6 +97,8 @@ namespace NineToShineApi.Migrations
                             t.HasCheckConstraint("ck_finance_direction", "direction IN ('income','expense')");
 
                             t.HasCheckConstraint("ck_finance_trip_link", "(category = 'TRIP' AND trip_id IS NOT NULL) OR (category <> 'TRIP' AND trip_id IS NULL)");
+
+                            t.HasCheckConstraint("ck_finance_game_requires_season", "game_id IS NULL OR season_id IS NOT NULL");
                         });
                 });
 
@@ -136,6 +138,9 @@ namespace NineToShineApi.Migrations
                     b.HasIndex("PlayedAt");
 
                     b.HasIndex("SeasonId");
+
+                    b.HasIndex("Id", "SeasonId")
+                        .IsUnique();
 
                     b.ToTable("game", (string)null);
                 });

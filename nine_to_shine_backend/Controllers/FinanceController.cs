@@ -318,16 +318,21 @@ namespace NineToShineApi.Controllers
                 if (!userExists) return BadRequest(new { error = "user_id not found." });
             }
 
+            Game? game = null;
             if (body.SeasonId.HasValue)
             {
                 var seasonExists = await _db.Season.AnyAsync(s => s.Id == body.SeasonId, ct);
                 if (!seasonExists) return BadRequest(new { error = "season_id not found." });
             }
 
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+
             if (body.GameId.HasValue)
             {
-                var gameExists = await _db.Game.AnyAsync(g => g.Id == body.GameId, ct);
-                if (!gameExists) return BadRequest(new { error = "game_id not found." });
+                game = await LockGameForUpdate(body.GameId.Value, ct);
+                if (game is null) return BadRequest(new { error = "game_id not found." });
+                if (body.SeasonId.HasValue && body.SeasonId.Value != game.SeasonId)
+                    return BadRequest(new { error = "season_id must match game_id's season." });
             }
 
             var category = body.Category.ToUpperInvariant();
@@ -342,12 +347,13 @@ namespace NineToShineApi.Controllers
                 Category = category, // z.B. "PIZZA", "DUES"
                 Description = body.Description,
                 UserId = body.UserId,
-                SeasonId = body.SeasonId,
+                SeasonId = game?.SeasonId ?? body.SeasonId,
                 GameId = body.GameId,
             };
 
             _db.Finance.Add(entity);
             await _db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
 
             string? userDisplayName = null;
             if (entity.UserId.HasValue)
@@ -410,10 +416,14 @@ namespace NineToShineApi.Controllers
             var seasonExists = await _db.Season.AnyAsync(s => s.Id == body.SeasonId.Value, ct);
             if (!seasonExists) return BadRequest(new { error = "season_id not found." });
 
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+
             if (body.GameId.HasValue)
             {
-                var gameExists = await _db.Game.AnyAsync(g => g.Id == body.GameId.Value, ct);
-                if (!gameExists) return BadRequest(new { error = "game_id not found." });
+                var game = await LockGameForUpdate(body.GameId.Value, ct);
+                if (game is null) return BadRequest(new { error = "game_id not found." });
+                if (body.SeasonId.Value != game.SeasonId)
+                    return BadRequest(new { error = "season_id must match game_id's season." });
             }
 
             var memberNames = await GetDepositMemberNames(body.Members, ct);
@@ -428,7 +438,6 @@ namespace NineToShineApi.Controllers
                 body.OtherIncomes,
                 memberNames);
 
-            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             _db.Finance.AddRange(created);
             await _db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
@@ -454,10 +463,14 @@ namespace NineToShineApi.Controllers
             var seasonExists = await _db.Season.AnyAsync(s => s.Id == body.SeasonId.Value, ct);
             if (!seasonExists) return BadRequest(new { error = "season_id not found." });
 
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+
             if (body.GameId.HasValue)
             {
-                var gameExists = await _db.Game.AnyAsync(g => g.Id == body.GameId.Value, ct);
-                if (!gameExists) return BadRequest(new { error = "game_id not found." });
+                var game = await LockGameForUpdate(body.GameId.Value, ct);
+                if (game is null) return BadRequest(new { error = "game_id not found." });
+                if (body.SeasonId.Value != game.SeasonId)
+                    return BadRequest(new { error = "season_id must match game_id's season." });
             }
 
             var category = body.GameId.HasValue ? "EVENT" : "OTHER";
@@ -473,7 +486,6 @@ namespace NineToShineApi.Controllers
                 GameId = body.GameId
             }).ToList();
 
-            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             _db.Finance.AddRange(created);
             await _db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
@@ -516,6 +528,7 @@ namespace NineToShineApi.Controllers
                 if (!userExists) return BadRequest(new { error = "user_id not found." });
             }
 
+            Game? game = null;
             if (body.SeasonId.HasValue)
             {
                 var seasonExists = await _db.Season.AnyAsync(s => s.Id == body.SeasonId, ct);
@@ -524,8 +537,10 @@ namespace NineToShineApi.Controllers
 
             if (body.GameId.HasValue)
             {
-                var gameExists = await _db.Game.AnyAsync(g => g.Id == body.GameId, ct);
-                if (!gameExists) return BadRequest(new { error = "game_id not found." });
+                game = await LockGameForUpdate(body.GameId.Value, ct);
+                if (game is null) return BadRequest(new { error = "game_id not found." });
+                if (body.SeasonId.HasValue && body.SeasonId.Value != game.SeasonId)
+                    return BadRequest(new { error = "season_id must match game_id's season." });
             }
 
             entity.OccurredAt = body.OccurredAt ?? entity.OccurredAt;
@@ -534,7 +549,7 @@ namespace NineToShineApi.Controllers
             entity.Category = body.Category.ToUpperInvariant();
             entity.Description = body.Description;
             entity.UserId = body.UserId;
-            entity.SeasonId = body.SeasonId;
+            entity.SeasonId = game?.SeasonId ?? body.SeasonId;
             entity.GameId = body.GameId;
 
             try
@@ -710,9 +725,8 @@ namespace NineToShineApi.Controllers
         {
             if (!ModelState.IsValid) return ValidationProblem(ModelState);
 
-            var game = await _db.Game
-                .AsNoTracking()
-                .FirstOrDefaultAsync(g => g.Id == gameId, ct);
+            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
+            var game = await LockGameForUpdate(gameId, ct);
             if (game is null) return NotFound(new { error = "game_id not found." });
 
             if (!body.OccurredAt.HasValue)
@@ -732,7 +746,6 @@ namespace NineToShineApi.Controllers
             if (memberNames.Count != body.Members.Count)
                 return BadRequest(new { error = "All member userIds must refer to existing users." });
 
-            await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             var existingTransactions = transactionIds.Count == 0
                 ? []
                 : await _db.Finance
@@ -948,6 +961,13 @@ namespace NineToShineApi.Controllers
             Finance row,
             DateTimeOffset expectedVersion) =>
             row.UpdatedAt == expectedVersion.UtcDateTime;
+
+        private async Task<Game?> LockGameForUpdate(long id, CancellationToken ct)
+        {
+            return await _db.Game
+                .FromSqlInterpolated($"SELECT * FROM game WHERE id = {id} FOR UPDATE")
+                .SingleOrDefaultAsync(ct);
+        }
 
         private ConflictObjectResult FinanceConflict() =>
             Conflict(new

@@ -111,14 +111,46 @@ public sealed class UserSeasonGameTests : IntegrationTestBase
             organizer,
             season,
             bookedGame,
-            unbookedGame,
-            TestFinance("expense", 20, "PIZZA", game: bookedGame));
+            unbookedGame);
+        await SeedAsync(TestFinance("expense", 20, "PIZZA", game: bookedGame));
 
         var games = await Client.GetFromJsonAsync<List<GameDto>>("/api/game/with-bookings");
 
         games.Should().NotBeNull();
         games!.Should().ContainSingle(x => x.Id == bookedGame.Id);
         games.Should().NotContain(x => x.Id == unbookedGame.Id);
+    }
+
+    [Fact]
+    public async Task Updating_booked_game_moves_finance_and_deleting_it_retains_season()
+    {
+        var user = TestUser();
+        var season = TestSeason(1);
+        var replacementSeason = TestSeason(2);
+        var game = TestGame(season, user);
+        await SeedAsync(user, season, replacementSeason, game);
+        var finance = TestFinance("expense", 20m, "EVENT", game: game);
+        await SeedAsync(finance);
+        var originalVersion = finance.UpdatedAt;
+
+        var update = await Client.PutAsJsonAsync($"/api/game/{game.Id}", new
+        {
+            seasonId = replacementSeason.Id,
+            gameName = game.GameName,
+            organizedByUserId = user.Id
+        });
+        update.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var moved = await WithDbContextAsync(db => db.Finance.AsNoTracking().SingleAsync());
+        moved.SeasonId.Should().Be(replacementSeason.Id);
+        moved.GameId.Should().Be(game.Id);
+        moved.UpdatedAt.Should().BeAfter(originalVersion);
+
+        var delete = await Client.DeleteAsync($"/api/game/{game.Id}");
+        delete.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var retained = await WithDbContextAsync(db => db.Finance.AsNoTracking().SingleAsync());
+        retained.GameId.Should().BeNull();
+        retained.SeasonId.Should().Be(replacementSeason.Id);
     }
 
     [Fact]

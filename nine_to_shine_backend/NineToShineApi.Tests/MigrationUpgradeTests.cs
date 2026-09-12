@@ -14,9 +14,63 @@ public sealed class MigrationUpgradeTests : IntegrationTestBase
     private const string BeforeOrganizerRotation = "20251217113609_RemovePenaltyTable";
     private const string BeforeHistoricalOrganizerReconciliation = "20260907120000_EnforceRankingPointsRange";
     private const string BeforeFinanceConcurrency = "20260522090629_AddOrganizerRotation";
+    private const string BeforeGameFinanceSeasonConsistency = "20260912160000_PreserveHistoricalOrganizerDutyAssignments";
 
     public MigrationUpgradeTests(PostgresFixture postgres) : base(postgres)
     {
+    }
+
+    [Fact]
+    public async Task Game_finance_season_migration_repairs_and_enforces_composite_invariant()
+    {
+        await Factory.ResetDatabaseAsync(BeforeGameFinanceSeasonConsistency);
+
+        await WithDbContextAsync(async db =>
+        {
+            var appliedMigrations = await db.Database.GetAppliedMigrationsAsync();
+            appliedMigrations.Last().Should().Be(BeforeGameFinanceSeasonConsistency);
+
+            await db.Database.ExecuteSqlRawAsync("""
+                INSERT INTO season (id, season_number) VALUES (940001, 940001), (940002, 940002);
+                INSERT INTO users (id, display_name, email, is_active, created_at)
+                VALUES (940003, 'Migration User', 'migration-game-finance@example.test', TRUE, now());
+                INSERT INTO game (id, season_id, played_at, game_name, organized_by_user_id)
+                VALUES (940004, 940001, TIMESTAMPTZ '2026-01-01 12:00:00+00', 'Migration Game', 940003);
+                INSERT INTO finance ("Id", occurred_at, direction, amount, category, season_id, game_id)
+                VALUES (940005, TIMESTAMPTZ '2026-01-01 12:00:00+00', 'expense', 10, 'EVENT', 940002, 940004),
+                       (940006, TIMESTAMPTZ '2026-01-01 12:00:00+00', 'expense', 11, 'EVENT', NULL, 940004);
+                """);
+
+            await db.GetService<IMigrator>().MigrateAsync();
+            db.ChangeTracker.Clear();
+
+            var repaired = await db.Finance.AsNoTracking()
+                .Where(finance => finance.Id == 940005 || finance.Id == 940006)
+                .OrderBy(finance => finance.Id)
+                .ToListAsync();
+            repaired.Should().OnlyContain(finance => finance.SeasonId == 940001 && finance.GameId == 940004);
+
+            var mismatchedWrite = async () => await db.Database.ExecuteSqlRawAsync(
+                "UPDATE finance SET season_id = 940002 WHERE \"Id\" = 940005");
+            var mismatchException = await mismatchedWrite.Should().ThrowAsync<PostgresException>();
+            mismatchException.Which.SqlState.Should().Be(PostgresErrorCodes.ForeignKeyViolation);
+
+            var nullSeasonWrite = async () => await db.Database.ExecuteSqlRawAsync(
+                "UPDATE finance SET season_id = NULL WHERE \"Id\" = 940005");
+            var nullSeasonException = await nullSeasonWrite.Should().ThrowAsync<PostgresException>();
+            nullSeasonException.Which.SqlState.Should().Be(PostgresErrorCodes.CheckViolation);
+
+            await db.Database.ExecuteSqlRawAsync("UPDATE game SET season_id = 940002 WHERE id = 940004");
+            var moved = await db.Finance.AsNoTracking().Where(finance => finance.GameId == 940004).ToListAsync();
+            moved.Should().OnlyContain(finance => finance.SeasonId == 940002);
+
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM game WHERE id = 940004");
+            var retained = await db.Finance.AsNoTracking()
+                .Where(finance => finance.Id == 940005 || finance.Id == 940006)
+                .ToListAsync();
+            retained.Should().OnlyContain(finance => finance.GameId == null && finance.SeasonId == 940002);
+            return true;
+        });
     }
 
     [Fact]
