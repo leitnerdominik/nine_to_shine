@@ -28,8 +28,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSnackbar } from 'notistack';
 
 import Layout from '@/components/Layout';
-import EntryTile from '@/components/EntryTile';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import RankingGameRow from './RankingGameRow';
 
 import {
   apiSeason,
@@ -154,19 +154,43 @@ const RankingsPage = () => {
     return Array.from(totals.values()).sort((a, b) => b.points - a.points);
   }, [rankings, gamesOfSelectedSeason, userNameById]);
 
-  // Für die Spiele-Kacheln (wie früher EntryTile): Datum + Titel
-  const gameEntriesForTiles = useMemo(() => {
+  const gameEntries = useMemo(() => {
     const gameIdsWithPoints = new Set(rankings.map((r) => r.gameId));
+    const rankingsByGameId = new Map<number, RankingDto[]>();
+    rankings.forEach((ranking) => {
+      const gameRankings = rankingsByGameId.get(ranking.gameId) ?? [];
+      gameRankings.push(ranking);
+      rankingsByGameId.set(ranking.gameId, gameRankings);
+    });
+
     return gamesOfSelectedSeason
       .filter((g) => gameIdsWithPoints.has(g.id))
       .slice()
       .sort((a, b) => dayjs(b.playedAt).valueOf() - dayjs(a.playedAt).valueOf())
-      .map((g) => ({
-        id: String(g.id),
-        date: dayjs(g.playedAt).format('DD.MM.YYYY'),
-        title: g.gameName,
-      }));
-  }, [gamesOfSelectedSeason, rankings]);
+      .map((g) => {
+        const presentRankings = (rankingsByGameId.get(g.id) ?? [])
+          .filter((ranking) => ranking.isPresent)
+          .sort((a, b) => a.id - b.id);
+        const winner = presentRankings.reduce<RankingDto | undefined>(
+          (currentWinner, ranking) =>
+            currentWinner == null || ranking.points > currentWinner.points
+              ? ranking
+              : currentWinner,
+          undefined
+        );
+
+        return {
+          id: g.id,
+          date: dayjs(g.playedAt).format('DD.MM.YYYY'),
+          title: g.gameName,
+          participantCount: presentRankings.length,
+          winnerName:
+            winner == null
+              ? '–'
+              : (userNameById.get(winner.userId) ?? `#${winner.userId}`),
+        };
+      });
+  }, [gamesOfSelectedSeason, rankings, userNameById]);
 
   return (
     <Layout>
@@ -378,23 +402,21 @@ const RankingsPage = () => {
             </Typography>
             <Box
               sx={{
-                display: 'flex',
-                flexDirection: { xs: 'column', sm: 'row' },
-                flexWrap: 'wrap',
-                gap: 3,
-                justifyContent: 'center',
+                display: 'grid',
+                gap: { xs: 1.5, sm: 2 },
               }}
             >
-              {gameEntriesForTiles.map((g) => (
-                <EntryTile
+              {gameEntries.map((g) => (
+                <RankingGameRow
                   key={g.id}
-                  id={g.id}
+                  gameId={g.id}
                   date={g.date}
                   title={g.title}
-                  baseRoute="/rankings"
+                  participantCount={g.participantCount}
+                  winnerName={g.winnerName}
                 />
               ))}
-              {gameEntriesForTiles.length === 0 && (
+              {gameEntries.length === 0 && (
                 <Typography variant="body2" color="text.secondary">
                   Keine Spiele in dieser Saison vorhanden.
                 </Typography>

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/test-utils';
 import RankingsPage from './page';
+import { getGameEmoji } from './RankingGameRow';
 
 const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
@@ -173,6 +174,84 @@ describe('RankingsPage season totals', () => {
       'href',
       '/rankings/game/new'
     );
+  });
+
+  it('shows game-row details with mapped and fallback artwork', async () => {
+    mocks.getUsers.mockResolvedValue([
+      {
+        id: 1,
+        displayName: 'Miriam',
+        isActive: true,
+        createdAt: '2025-01-01T00:00:00.000Z',
+      },
+      {
+        id: 2,
+        displayName: 'Felix',
+        isActive: true,
+        createdAt: '2025-01-01T00:00:00.000Z',
+      },
+      {
+        id: 3,
+        displayName: 'Clara',
+        isActive: true,
+        createdAt: '2025-01-01T00:00:00.000Z',
+      },
+    ]);
+    mocks.getGames.mockResolvedValue([
+      {
+        id: 10,
+        seasonId: 3,
+        playedAt: '2026-07-01T18:00:00.000Z',
+        gameName: 'Demo-Bowling',
+        organizedByUserId: 1,
+        organizedByDisplayName: 'Miriam',
+      },
+      {
+        id: 11,
+        seasonId: 3,
+        playedAt: '2026-06-01T18:00:00.000Z',
+        gameName: 'Mystery Game',
+        organizedByUserId: 2,
+        organizedByDisplayName: 'Felix',
+      },
+    ]);
+    mocks.getRankings.mockResolvedValue([
+      { id: 22, gameId: 10, userId: 3, points: 10, isPresent: false },
+      { id: 21, gameId: 10, userId: 2, points: 8, isPresent: true },
+      { id: 20, gameId: 10, userId: 1, points: 8, isPresent: true },
+      { id: 23, gameId: 11, userId: 3, points: 9, isPresent: false },
+    ]);
+
+    renderWithProviders(<RankingsPage />);
+
+    const bowlingRow = await screen.findByRole('link', {
+      name: 'Spiel Demo-Bowling öffnen',
+    });
+    expect(bowlingRow).toHaveAttribute('href', '/rankings/10');
+    expect(within(bowlingRow).getByText('🎳')).toBeInTheDocument();
+    expect(within(bowlingRow).getByText('01.07.2026')).toBeInTheDocument();
+    expect(within(bowlingRow).getByText('2 Teilnehmer')).toBeInTheDocument();
+    expect(within(bowlingRow).getByText('Miriam')).toBeInTheDocument();
+
+    const fallbackRow = screen.getByRole('link', {
+      name: 'Spiel Mystery Game öffnen',
+    });
+    expect(fallbackRow).toHaveAttribute('href', '/rankings/11');
+    expect(within(fallbackRow).getByText('🎮')).toBeInTheDocument();
+    expect(within(fallbackRow).getByText('0 Teilnehmer')).toBeInTheDocument();
+    expect(within(fallbackRow).getByText('–')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Bowling-Abend', '🎳'],
+    ['Pubquiz', '💡'],
+    ['Tischtennis', '🏓'],
+    ['Schach', '♟️'],
+    ['Darts', '🎯'],
+    ['Tischfußball', '⚽'],
+    ['Unbekanntes Spiel', '🎮'],
+  ])('maps %s to its game artwork', (gameName, emoji) => {
+    expect(getGameEmoji(gameName)).toBe(emoji);
   });
 
   it('shows the ranking and games empty states', async () => {
