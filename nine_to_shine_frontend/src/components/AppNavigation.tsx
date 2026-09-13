@@ -54,7 +54,7 @@ const primaryNavigationItems: PrimaryNavigationItem[] = [
     icon: <CleaningServicesIcon />,
   },
   { label: 'Finanzen', path: routes.finances, icon: <EuroIcon /> },
-  { label: 'Admin', path: routes.admincenter, icon: <AdminPanelSettingsIcon /> },
+  { label: 'Informationen', path: routes.info, icon: <InfoOutlinedIcon /> },
 ];
 
 function isRouteActive(pathname: string, path: string) {
@@ -263,13 +263,13 @@ export default function AppNavigation({ user }: AppNavigationProps) {
               >
                 <MenuItem
                   component={Link}
-                  href={routes.info}
+                  href={routes.admincenter}
                   onClick={closeAccountMenu}
                 >
                   <ListItemIcon>
-                    <InfoOutlinedIcon fontSize="small" />
+                    <AdminPanelSettingsIcon fontSize="small" />
                   </ListItemIcon>
-                  Informationen
+                  Admin
                 </MenuItem>
                 <MenuItem onClick={() => void handleLogout()}>
                   <ListItemIcon>

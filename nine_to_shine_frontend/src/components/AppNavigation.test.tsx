@@ -44,7 +44,7 @@ describe('AppNavigation', () => {
     mocks.signOut.mockResolvedValue(undefined);
   });
 
-  it('exposes all primary destinations and keeps information in the account menu', async () => {
+  it('exposes all primary destinations and keeps admin in the account menu', async () => {
     const interaction = userEvent.setup();
     renderWithProviders(<AppNavigation user={user} />);
 
@@ -60,7 +60,7 @@ describe('AppNavigation', () => {
       ['Rangliste', '/rankings'],
       ['Organisieren', '/organizer-duties'],
       ['Finanzen', '/finance'],
-      ['Admin', '/admincenter'],
+      ['Informationen', '/info'],
     ];
 
     for (const [name, href] of expectedLinks) {
@@ -80,8 +80,8 @@ describe('AppNavigation', () => {
     );
 
     expect(
-      screen.getByRole('menuitem', { name: 'Informationen' })
-    ).toHaveAttribute('href', '/info');
+      screen.getByRole('menuitem', { name: 'Admin' })
+    ).toHaveAttribute('href', '/admincenter');
   });
 
   it('marks nested routes as active in both navigation variants', () => {
