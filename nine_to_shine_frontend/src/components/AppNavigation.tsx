@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -18,7 +19,6 @@ import {
   Toolbar,
   Typography,
 } from '@mui/material';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import HomeIcon from '@mui/icons-material/Home';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import EuroIcon from '@mui/icons-material/Euro';
@@ -30,6 +30,7 @@ import { AuthError, signOut, type User } from 'firebase/auth';
 import { enqueueSnackbar } from 'notistack';
 
 import { routes } from '@/common/routes';
+import logo from '@/assets/logo.png';
 import { getFirebaseAuth } from '../../firebase';
 
 export type NavigationUser = Pick<User, 'displayName' | 'email'>;
@@ -169,7 +170,21 @@ export default function AppNavigation({ user }: AppNavigationProps) {
             >
               nine to shine
             </Typography>
-            <AutoAwesomeIcon color="primary" sx={{ fontSize: 18 }} />
+            <Box
+              sx={{
+                position: 'relative',
+                width: { xs: 30, md: 34 },
+                height: { xs: 30, md: 34 },
+                flexShrink: 0,
+              }}
+            >
+              <Image
+                src={logo}
+                alt=""
+                fill
+                sizes="(min-width: 900px) 34px, 30px"
+              />
+            </Box>
           </Box>
 
           {user && (

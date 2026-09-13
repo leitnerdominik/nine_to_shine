@@ -141,10 +141,12 @@ describe('AppNavigation', () => {
   it('shows only the brand when no user is authenticated', () => {
     renderWithProviders(<AppNavigation user={null} />);
 
-    expect(screen.getByRole('link', { name: 'Zur Übersicht' })).toHaveAttribute(
-      'href',
-      '/'
-    );
+    const brandLink = screen.getByRole('link', { name: 'Zur Übersicht' });
+    const brandLogo = brandLink.querySelector('img');
+
+    expect(brandLink).toHaveAttribute('href', '/');
+    expect(brandLogo).toBeVisible();
+    expect(brandLogo).toHaveAttribute('alt', '');
     expect(
       screen.queryByRole('navigation', { name: 'Hauptnavigation' })
     ).not.toBeInTheDocument();
