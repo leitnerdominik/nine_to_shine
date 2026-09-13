@@ -266,6 +266,15 @@ describe('ranked-game save flows', () => {
     expect(
       await screen.findByRole('heading', { name: 'Spiel bearbeiten: Tennis' })
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Spieldaten', level: 2 })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Punkte pro Spieler', level: 2 })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Spiel auswählen' })
+    ).not.toBeInTheDocument();
     await browser.click(screen.getByRole('button', { name: 'Speichern' }));
 
     await waitFor(() =>
@@ -284,6 +293,36 @@ describe('ranked-game save flows', () => {
     expect(mocks.removeRanking).not.toHaveBeenCalled();
     expect(mocks.createRanking).not.toHaveBeenCalled();
     expect(mocks.router.push).toHaveBeenCalledWith('/rankings/10');
+  });
+
+  it('cancels editing back to the game ranking', async () => {
+    const browser = userEvent.setup();
+    mocks.getRankings.mockResolvedValueOnce([ranking]);
+    renderWithProviders(<EditRankedGamePage />);
+
+    await browser.click(
+      await screen.findByRole('button', { name: 'Abbrechen' })
+    );
+
+    expect(mocks.router.push).toHaveBeenCalledWith('/rankings/10');
+  });
+
+  it('shows the shared absent-player state in edit mode', async () => {
+    mocks.getRankings.mockResolvedValueOnce([
+      { ...ranking, points: 1, isPresent: false },
+    ]);
+    renderWithProviders(<EditRankedGamePage />);
+
+    const attendance = await screen.findByRole('checkbox', {
+      name: 'Anwesend',
+    });
+    const points = screen.getByRole('spinbutton', { name: 'Punkte' });
+
+    expect(attendance).not.toBeChecked();
+    expect(points).toBeDisabled();
+    expect(
+      screen.getByText('Abwesend: automatisch 1 Punkt')
+    ).toBeInTheDocument();
   });
 
   it.each(rankingPointCases)(
