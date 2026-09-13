@@ -8,6 +8,7 @@ import {
   Divider,
   Fab,
   Link,
+  MenuItem,
   Paper,
   Stack,
   Table,
@@ -16,6 +17,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Tooltip,
   Typography,
   useTheme,
@@ -231,34 +233,25 @@ const RankingsPage = () => {
                 }}
               />
 
-              {selectedSeasonNumber != null ? (
-                <Stack direction="row" flexWrap="wrap" gap={1.25}>
-                  {seasonNumbers.map((num) => {
-                    const isSelected = num === selectedSeasonNumber;
-                    return (
-                      <Button
-                        key={num}
-                        variant={isSelected ? 'contained' : 'outlined'}
-                        aria-pressed={isSelected}
-                        onClick={() => setSeasonNumber(num)}
-                        sx={{
-                          minHeight: 46,
-                          borderRadius: 999,
-                          px: { xs: 2.5, sm: 3.25 },
-                          textTransform: 'none',
-                          fontSize: '1rem',
-                          fontWeight: 700,
-                          borderColor: 'primary.main',
-                        }}
-                      >
-                        Saison {num}
-                      </Button>
-                    );
-                  })}
-                </Stack>
-              ) : (
-                <Typography color="text.secondary">Saison –</Typography>
-              )}
+              <TextField
+                select
+                label="Saison"
+                value={selectedSeasonNumber ?? ''}
+                onChange={(event) => setSeasonNumber(Number(event.target.value))}
+                sx={{
+                  width: { xs: '100%', md: 228 },
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2.5,
+                    bgcolor: alpha(theme.palette.background.paper, 0.92),
+                  },
+                }}
+              >
+                {seasonNumbers.map((seasonNumber) => (
+                  <MenuItem key={seasonNumber} value={seasonNumber}>
+                    Saison {seasonNumber}
+                  </MenuItem>
+                ))}
+              </TextField>
             </Box>
 
             <TableContainer

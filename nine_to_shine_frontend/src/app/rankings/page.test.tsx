@@ -127,11 +127,9 @@ describe('RankingsPage season totals', () => {
   it('shows the selected season even when only one season exists', async () => {
     renderWithProviders(<RankingsPage />);
 
-    const seasonButton = await screen.findByRole('button', {
-      name: 'Saison 7',
-    });
+    const seasonSelect = await screen.findByRole('combobox', { name: 'Saison' });
 
-    expect(seasonButton).toHaveAttribute('aria-pressed', 'true');
+    expect(seasonSelect).toHaveTextContent('Saison 7');
   });
 
   it('updates the season query when another season is selected', async () => {
@@ -143,7 +141,8 @@ describe('RankingsPage season totals', () => {
 
     renderWithProviders(<RankingsPage />);
 
-    await user.click(await screen.findByRole('button', { name: 'Saison 6' }));
+    await user.click(await screen.findByRole('combobox', { name: 'Saison' }));
+    await user.click(screen.getByRole('option', { name: 'Saison 6' }));
 
     expect(mocks.replace).toHaveBeenCalledWith('/rankings?season=6');
   });
