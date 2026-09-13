@@ -103,7 +103,7 @@ export default function DashboardPage() {
           sx={{ display: 'block', mb: { xs: 1.5, sm: 2 } }}
         >
           {currentSeasonNumber
-            ? `Saison ${currentSeasonNumber}`
+            ? `Saison ${currentSeasonNumber} · ${dayjs().year()}`
             : 'Saison –'}
         </Typography>
 

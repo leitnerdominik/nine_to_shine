@@ -66,7 +66,10 @@ describe('DashboardPage', () => {
       ).not.toBeInTheDocument()
     );
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Saison 7' })
+      screen.getByRole('heading', {
+        level: 1,
+        name: `Saison 7 · ${new Date().getFullYear()}`,
+      })
     ).toBeInTheDocument();
   });
 
@@ -130,7 +133,10 @@ describe('DashboardPage', () => {
     renderWithProviders(<DashboardPage />);
 
     expect(
-      await screen.findByRole('heading', { level: 1, name: 'Saison 9' })
+      await screen.findByRole('heading', {
+        level: 1,
+        name: `Saison 9 · ${new Date().getFullYear()}`,
+      })
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(mocks.getTopRanked).toHaveBeenCalledWith(9);
