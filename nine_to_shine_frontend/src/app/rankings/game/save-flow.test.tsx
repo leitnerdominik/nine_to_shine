@@ -194,6 +194,7 @@ describe('ranked-game save flows', () => {
     expect(attendance).toBeChecked();
     expect(points).toBeEnabled();
     expect(points).toHaveValue(null);
+    expect(points).toHaveAttribute('aria-invalid', 'false');
 
     await browser.type(gameName, 'Tennis');
     await browser.type(points, '8');
@@ -307,7 +308,8 @@ describe('ranked-game save flows', () => {
     expect(mocks.router.push).toHaveBeenCalledWith('/rankings/10');
   });
 
-  it('shows the shared absent-player state in edit mode', async () => {
+  it('defers empty-points validation when an absent player returns', async () => {
+    const browser = userEvent.setup();
     mocks.getRankings.mockResolvedValueOnce([
       { ...ranking, points: 1, isPresent: false },
     ]);
@@ -323,6 +325,21 @@ describe('ranked-game save flows', () => {
     expect(
       screen.getByText('Abwesend: automatisch 1 Punkt')
     ).toBeInTheDocument();
+
+    await browser.click(attendance);
+
+    expect(attendance).toBeChecked();
+    expect(points).toBeEnabled();
+    expect(points).toHaveValue(null);
+    expect(points).toHaveAttribute('aria-invalid', 'false');
+    expect(
+      screen.queryByText('Abwesend: automatisch 1 Punkt')
+    ).not.toBeInTheDocument();
+
+    await browser.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await waitFor(() => expect(points).toHaveAttribute('aria-invalid', 'true'));
+    expect(mocks.saveGameSnapshot).not.toHaveBeenCalled();
   });
 
   it.each(rankingPointCases)(

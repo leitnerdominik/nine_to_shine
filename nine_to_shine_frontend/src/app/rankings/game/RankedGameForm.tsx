@@ -64,6 +64,7 @@ export default function RankedGameForm({
     register,
     handleSubmit,
     setValue,
+    clearErrors,
     formState: { errors, isSubmitting },
   } = form;
   const entries = useWatch({ control, name: 'entries' });
@@ -75,9 +76,12 @@ export default function RankedGameForm({
       shouldDirty: true,
     });
     setValue(`entries.${index}.points`, present ? '' : '1', {
-      shouldValidate: true,
+      shouldValidate: !present,
       shouldDirty: true,
     });
+    if (present) {
+      clearErrors(`entries.${index}.points`);
+    }
   };
 
   return (
