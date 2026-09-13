@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Box, Grid2 } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
 import SavingsIcon from '@mui/icons-material/Savings';
 import dayjs from 'dayjs';
 import 'dayjs/locale/de';
 
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
 import {
   apiRanking,
   apiOrganizerDuty,
@@ -98,44 +97,54 @@ export default function DashboardPage() {
 
   return (
     <Layout>
-      <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
-        <CustomTitle text="Übersicht" />
+      <Box sx={{ width: '100%', maxWidth: 1000, mx: 'auto' }}>
+        <Typography
+          component="h1"
+          variant="overline"
+          color="text.secondary"
+          sx={{ display: 'block', mb: { xs: 1.5, sm: 2 } }}
+        >
+          {currentSeasonNumber
+            ? `Saison ${currentSeasonNumber}`
+            : 'Saison –'}
+        </Typography>
 
-        <Grid2 container spacing={3} sx={{ mt: 2 }}>
-          {/* --- KACHEL 1: TOP PLAYER (RANKING) -> /rankings --- */}
-          <Grid2 size={{ xs: 12, md: 6 }}>
-            <DashboardLeaderCard
-              label={`Platz #1${
-                currentSeasonNumber ? ` (SAISON ${currentSeasonNumber})` : ''
-              }`}
-              name={topPlayer?.userDisplayName ?? null}
-              points={topPlayer ? `${topPlayer.totalPoints} Punkte` : null}
-              emptyText="Noch keine Punkte"
-              href={routes.rankings}
-            />
-          </Grid2>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: 'minmax(0, 1fr)',
+              md: 'minmax(0, 5fr) minmax(0, 7fr)',
+            },
+            gap: { xs: 1.5, sm: 2, md: 2.5 },
+            alignItems: 'stretch',
+          }}
+        >
+          <DashboardLeaderCard
+            label="Platz #1"
+            name={topPlayer?.userDisplayName ?? null}
+            points={topPlayer ? `${topPlayer.totalPoints} Punkte` : null}
+            emptyText="Noch keine Punkte"
+            href={routes.rankings}
+          />
 
-          {/* --- KACHEL 2: ORGANISATION -> /organizer-duties --- */}
-          <Grid2 size={{ xs: 12, md: 6 }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: 'repeat(2, minmax(0, 1fr))',
+                md: '1fr',
+              },
+              gridAutoRows: '1fr',
+              gap: { xs: 1.5, sm: 2, md: 2.5 },
+              minWidth: 0,
+              '@media (max-width: 359.95px)': {
+                gridTemplateColumns: 'minmax(0, 1fr)',
+              },
+            }}
+          >
             <DashboardStatusCard
-              label="NÄCHSTER ZU ORGANISIEREN"
-              value={nextDuty ? nextDuty.userDisplayName ?? '-' : 'Frei!'}
-              detail={
-                nextDuty
-                  ? `für ${dayjs(nextDuty.dutyDate).format('MMMM YYYY')}`
-                  : 'Keiner Eingetragen!'
-              }
-              href={routes.organizeduties}
-              icon={<CleaningServicesIcon />}
-              tone="info"
-            />
-          </Grid2>
-
-          <Grid2 size={{ xs: 12 }}>
-            <DashboardStatusCard
-              label={`OFFENE SPIELBEITRÄGE${
-                currentSeasonNumber ? ` (SAISON ${currentSeasonNumber})` : ''
-              }`}
+              label="OFFENE SPIELBEITRÄGE"
               value={
                 openDuesCount === null
                   ? 'Nicht verfügbar'
@@ -156,8 +165,21 @@ export default function DashboardPage() {
               icon={<SavingsIcon />}
               tone={duesTone}
             />
-          </Grid2>
-        </Grid2>
+
+            <DashboardStatusCard
+              label="NÄCHSTER ZU ORGANISIEREN"
+              value={nextDuty ? nextDuty.userDisplayName ?? '-' : 'Frei!'}
+              detail={
+                nextDuty
+                  ? `für ${dayjs(nextDuty.dutyDate).format('MMMM YYYY')}`
+                  : 'Keiner Eingetragen!'
+              }
+              href={routes.organizeduties}
+              icon={<CleaningServicesIcon />}
+              tone="info"
+            />
+          </Box>
+        </Box>
       </Box>
     </Layout>
   );

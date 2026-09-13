@@ -200,8 +200,13 @@ export function DashboardStatusCard({
           },
         }}
       >
-        <CardContent sx={{ height: '100%', p: { xs: 2.5, sm: 3 } }}>
-          <Stack direction="row" spacing={2} alignItems="center">
+        <CardContent sx={{ height: '100%', p: { xs: 2, sm: 2.5, md: 3 } }}>
+          <Stack
+            direction="row"
+            spacing={{ xs: 0, sm: 2 }}
+            alignItems="center"
+            sx={{ height: '100%' }}
+          >
             <Box
               aria-hidden="true"
               sx={(theme) => {
@@ -211,8 +216,8 @@ export function DashboardStatusCard({
                   width: 56,
                   height: 56,
                   flexShrink: 0,
+                  display: { xs: 'none', sm: 'grid' },
                   borderRadius: 2,
-                  display: 'grid',
                   placeItems: 'center',
                   bgcolor: colors.iconSurface,
                   color: colors.iconColor,
@@ -229,7 +234,11 @@ export function DashboardStatusCard({
               </Typography>
               <Typography
                 variant="h4"
-                sx={{ mt: 0.25, overflowWrap: 'anywhere' }}
+                sx={{
+                  mt: 0.25,
+                  fontSize: { xs: '1.65rem', sm: '2rem', md: '2.125rem' },
+                  overflowWrap: 'anywhere',
+                }}
               >
                 {value}
               </Typography>

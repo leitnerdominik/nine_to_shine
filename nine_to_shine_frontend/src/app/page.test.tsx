@@ -27,11 +27,57 @@ vi.mock('@/components/LoadingSkeleton', () => ({
   default: () => React.createElement('div', null, 'Loading dashboard'),
 }));
 
-describe('DashboardPage dues summary', () => {
+describe('DashboardPage', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mocks.getSeasons.mockResolvedValue([{ id: 5, seasonNumber: 7 }]);
     mocks.getTopRanked.mockResolvedValue(null);
     mocks.getNextDuty.mockResolvedValue(null);
+    mocks.getDuesStatus.mockResolvedValue([]);
+  });
+
+  it('uses the highest season and preserves summary navigation', async () => {
+    mocks.getSeasons.mockResolvedValue([
+      { id: 3, seasonNumber: 3 },
+      { id: 9, seasonNumber: 9 },
+      { id: 7, seasonNumber: 7 },
+    ]);
+    mocks.getTopRanked.mockResolvedValue({
+      userId: 12,
+      userDisplayName: 'Dominik Leitner',
+      totalPoints: 128,
+    });
+    mocks.getNextDuty.mockResolvedValue({
+      id: 4,
+      dutyDate: '2026-10-01T00:00:00.000Z',
+      userId: 15,
+      userDisplayName: 'Florian',
+      seasonId: 9,
+      seasonDisplayNumber: 9,
+      isSkipped: false,
+      isManualOverride: false,
+    });
+
+    renderWithProviders(<DashboardPage />);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Saison 9' })
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.getTopRanked).toHaveBeenCalledWith(9);
+      expect(mocks.getDuesStatus).toHaveBeenCalledWith(9);
+    });
+
+    expect(screen.getByText('Dominik Leitner').closest('a')).toHaveAttribute(
+      'href',
+      '/rankings'
+    );
+    expect(screen.getByText('128 Punkte')).toBeInTheDocument();
+    expect(screen.getByText('Florian').closest('a')).toHaveAttribute(
+      'href',
+      '/organizer-duties'
+    );
+    expect(screen.getByText('für Oktober 2026')).toBeInTheDocument();
   });
 
   it('shows the current-season open count and links to the overview', async () => {
