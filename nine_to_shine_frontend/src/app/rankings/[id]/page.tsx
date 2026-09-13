@@ -8,13 +8,11 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Container,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Divider,
   Paper,
   Stack,
   Table,
@@ -27,11 +25,11 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { useSnackbar } from 'notistack';
 
 import Layout from '@/components/Layout';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
-import CustomTitle from '@/components/CustomTitle';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
@@ -162,118 +160,170 @@ const RankingEntryPage: React.FC = () => {
       {loading || !game ? (
         <LoadingSkeleton />
       ) : (
-        <Container>
-          <Box mb="2rem">
-            <CustomTitle text={game.gameName} />
-            <Stack direction="column" spacing={1} alignItems="flex-start">
-              <Typography variant="body2">
-                {dayjs(game.playedAt).format('DD.MM.YYYY')}
-              </Typography>
-              <Stack direction="row" spacing={1}>
+        <Box
+          sx={{
+            width: '100%',
+            maxWidth: 1180,
+            minHeight: {
+              xs: 'calc(100vh - 176px)',
+              md: 'calc(100vh - 128px)',
+            },
+            mx: 'auto',
+            pb: 4,
+          }}
+        >
+          <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+            <Typography
+              component="h1"
+              sx={{
+                color: 'text.primary',
+                fontSize: { xs: '2.5rem', sm: '3.25rem' },
+                fontWeight: 800,
+                letterSpacing: '-0.04em',
+                lineHeight: 1.05,
+              }}
+            >
+              {game.gameName}
+            </Typography>
+            <Box
+              aria-hidden="true"
+              sx={{
+                width: 40,
+                height: 6,
+                mt: 1.25,
+                mb: 1.75,
+                borderRadius: 999,
+                bgcolor: 'primary.main',
+              }}
+            />
+            <Stack direction="row" flexWrap="wrap" gap={1}>
+              <Chip
+                label={dayjs(game.playedAt).format('DD.MM.YYYY')}
+                size="medium"
+                sx={{
+                  borderRadius: 999,
+                  bgcolor: 'action.selected',
+                  fontWeight: 600,
+                }}
+              />
+              <Chip
+                label={seasonNumber ? `Saison ${seasonNumber}` : 'Saison –'}
+                size="medium"
+                color="primary"
+                sx={{ borderRadius: 999, fontWeight: 700 }}
+              />
+              {game.organizedByDisplayName && (
                 <Chip
-                  label={seasonNumber ? `Saison ${seasonNumber}` : 'Saison –'}
+                  label={`Organisiert von: ${game.organizedByDisplayName}`}
                   size="medium"
-                  sx={{ bgcolor: theme.palette.action.selected }}
+                  variant="outlined"
+                  sx={{ borderRadius: 999, fontWeight: 600 }}
                 />
-                {game.organizedByDisplayName && (
-                  <Chip
-                    label={`Organisiert von: ${game.organizedByDisplayName}`}
-                    size="medium"
-                    variant="outlined"
-                  />
-                )}
-              </Stack>
+              )}
             </Stack>
-            <Divider sx={{ mt: 1 }} />
-            <Divider />
           </Box>
 
           <TableContainer
             component={Paper}
             sx={{
-              borderRadius: 4,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-              overflow: 'hidden',
+              p: { xs: 1.25, sm: 2 },
+              borderRadius: { xs: 3, sm: 4 },
+              boxShadow: 'none',
+              overflowX: 'auto',
             }}
           >
-            <Table aria-label="Ranking-Tabelle">
+            <Table
+              aria-label="Ranking-Tabelle"
+              sx={{ borderCollapse: 'separate', borderSpacing: '0 5px' }}
+            >
               <TableHead
                 sx={{
-                  background: `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.primary.light} 90%)`,
-                  color: theme.palette.primary.contrastText,
-                  fontSize: '1.1rem',
+                  '& .MuiTableCell-root': {
+                    borderBottom: 0,
+                    color: 'text.secondary',
+                    fontSize: '0.75rem',
+                    fontWeight: 800,
+                    letterSpacing: '0.1em',
+                    textTransform: 'uppercase',
+                  },
                 }}
               >
                 <TableRow>
-                  <TableCell
-                    sx={{
-                      fontWeight: 700,
-                      fontSize: 'inherit',
-                      color: 'inherit',
-                    }}
-                  >
+                  <TableCell sx={{ width: { xs: 110, sm: 190 } }}>
                     Platz
                   </TableCell>
-                  <TableCell
-                    sx={{
-                      fontWeight: 700,
-                      fontSize: 'inherit',
-                      color: 'inherit',
-                    }}
-                  >
-                    Name
-                  </TableCell>
-                  <TableCell
-                    sx={{
-                      fontWeight: 700,
-                      fontSize: 'inherit',
-                      color: 'inherit',
-                    }}
-                  >
+                  <TableCell>Name</TableCell>
+                  <TableCell align="right" sx={{ width: { xs: 80, sm: 120 } }}>
                     Punkte
                   </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {rows.map((row, idx) => {
-                  const { iconColor, bgColor } = getRankStyle(idx);
+                  const { iconColor } = getRankStyle(idx);
+                  const rowBackground =
+                    idx === 0
+                      ? alpha(theme.palette.primary.main, 0.09)
+                      : idx === 1
+                        ? alpha('#C0C0C0', 0.08)
+                        : idx === 2
+                          ? alpha('#CD7F32', 0.07)
+                          : 'transparent';
+                  const isPodium = idx < 3;
+
                   return (
                     <TableRow
                       key={row.userId}
                       sx={{
-                        backgroundColor: bgColor,
-                        '&:hover': {
-                          backgroundColor: 'rgba(0,0,0,0.04)',
+                        '& > .MuiTableCell-root': {
+                          bgcolor: rowBackground,
+                          borderBottom: isPodium ? 0 : 1,
+                          borderColor: 'divider',
+                          transition: 'background-color 160ms ease',
+                        },
+                        '& > .MuiTableCell-root:first-of-type': {
+                          borderRadius: isPodium ? '12px 0 0 12px' : 0,
+                        },
+                        '& > .MuiTableCell-root:last-of-type': {
+                          borderRadius: isPodium ? '0 12px 12px 0' : 0,
+                        },
+                        '&:hover > .MuiTableCell-root': {
+                          bgcolor: alpha(theme.palette.primary.main, 0.075),
                         },
                       }}
                     >
                       <TableCell>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Typography fontWeight={idx < 3 ? 'bold' : 'normal'}>
-                            # {idx + 1}
+                        <Stack direction="row" alignItems="center" spacing={1.5}>
+                          <Typography fontWeight={isPodium ? 800 : 600}>
+                            #{idx + 1}
                           </Typography>
-                          {idx < 3 && (
-                            <EmojiEventsIcon sx={{ color: iconColor }} />
+                          {isPodium && (
+                            <EmojiEventsIcon
+                              aria-label={`Pokal für Platz ${idx + 1}`}
+                              sx={{ color: iconColor, fontSize: '1.65rem' }}
+                            />
                           )}
                         </Stack>
                       </TableCell>
                       <TableCell>
-                        <Typography fontWeight={idx < 3 ? 'bold' : 'normal'}>
-                          {row.name}
-                        </Typography>
-                        {row.isPresent === false && (
-                          <Typography
-                            variant="caption"
-                            color="text.primary"
-                            component="span"
-                            sx={{ ml: 1 }}
-                          >
-                            (abwesend)
+                        <Stack
+                          direction="row"
+                          alignItems="baseline"
+                          flexWrap="wrap"
+                          columnGap={1}
+                        >
+                          <Typography fontWeight={isPodium ? 800 : 500}>
+                            {row.name}
                           </Typography>
-                        )}
+                          {row.isPresent === false && (
+                            <Typography variant="caption" color="text.secondary">
+                              (abwesend)
+                            </Typography>
+                          )}
+                        </Stack>
                       </TableCell>
-                      <TableCell>
-                        <Typography fontWeight={idx < 3 ? 'bold' : 'normal'}>
+                      <TableCell align="right">
+                        <Typography fontWeight={isPodium ? 800 : 500}>
                           {row.points}
                         </Typography>
                       </TableCell>
@@ -282,8 +332,12 @@ const RankingEntryPage: React.FC = () => {
                 })}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={3}>
-                      <Typography variant="body2">
+                    <TableCell colSpan={3} sx={{ borderBottom: 0 }}>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ py: 4, textAlign: 'center' }}
+                      >
                         Keine Daten vorhanden.
                       </Typography>
                     </TableCell>
@@ -320,8 +374,8 @@ const RankingEntryPage: React.FC = () => {
             </DialogActions>
           </Dialog>
           <Stack
-            direction="row"
-            alignItems={{ xs: 'flex-start', sm: 'center' }}
+            direction={{ xs: 'column', sm: 'row' }}
+            alignItems={{ xs: 'stretch', sm: 'center' }}
             justifyContent="space-between"
             spacing={2}
             sx={{ mt: 3 }}
@@ -332,6 +386,13 @@ const RankingEntryPage: React.FC = () => {
                   onClick={onEdit}
                   variant="outlined"
                   startIcon={<EditIcon />}
+                  sx={{
+                    width: { xs: '100%', sm: 'auto' },
+                    borderRadius: 999,
+                    px: 2.5,
+                    textTransform: 'none',
+                    fontWeight: 700,
+                  }}
                 >
                   Bearbeiten
                 </Button>
@@ -344,13 +405,20 @@ const RankingEntryPage: React.FC = () => {
                   color="error"
                   variant="contained"
                   startIcon={<DeleteIcon />}
+                  sx={{
+                    width: { xs: '100%', sm: 'auto' },
+                    borderRadius: 999,
+                    px: 2.5,
+                    textTransform: 'none',
+                    fontWeight: 700,
+                  }}
                 >
                   Löschen
                 </Button>
               </span>
             </Tooltip>
           </Stack>
-        </Container>
+        </Box>
       )}
     </Layout>
   );
