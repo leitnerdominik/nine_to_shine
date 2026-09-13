@@ -137,6 +137,99 @@ describe('ranked-game save flows', () => {
     expect(mocks.router.push).toHaveBeenCalledWith('/rankings');
   });
 
+  it('renders the redesigned form sections and prefills an existing game', async () => {
+    const browser = userEvent.setup();
+    renderWithProviders(<NewRankedGamePage />);
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Neues Spiel erstellen',
+        level: 1,
+      })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Spiel auswählen', level: 2 })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Spieldaten', level: 2 })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Punkte pro Spieler', level: 2 })
+    ).toBeInTheDocument();
+
+    await browser.click(
+      screen.getByRole('combobox', { name: 'Vorhandenes Spiel auswählen' })
+    );
+    await browser.click(screen.getByRole('option', { name: 'Tennis – Nina' }));
+
+    expect(screen.getByRole('combobox', { name: 'Saison' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    );
+    expect(screen.getByLabelText('Datum')).toBeDisabled();
+    expect(screen.getByRole('textbox', { name: 'Spielname' })).toHaveValue(
+      'Tennis'
+    );
+    expect(
+      screen.getByRole('combobox', { name: 'Organisiert von' })
+    ).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('updates attendance points and restores the blank form on reset', async () => {
+    const browser = userEvent.setup();
+    renderWithProviders(<NewRankedGamePage />);
+
+    const attendance = await screen.findByRole('checkbox', {
+      name: 'Anwesend',
+    });
+    const points = screen.getByRole('spinbutton', { name: 'Punkte' });
+    const gameName = screen.getByRole('textbox', { name: 'Spielname' });
+
+    await browser.click(attendance);
+    expect(attendance).not.toBeChecked();
+    expect(points).toBeDisabled();
+    expect(points).toHaveValue(1);
+
+    await browser.click(attendance);
+    expect(attendance).toBeChecked();
+    expect(points).toBeEnabled();
+    expect(points).toHaveValue(null);
+
+    await browser.type(gameName, 'Tennis');
+    await browser.type(points, '8');
+    await browser.click(screen.getByRole('button', { name: 'Zurücksetzen' }));
+
+    expect(gameName).toHaveValue('');
+    expect(points).toHaveValue(null);
+    expect(attendance).toBeChecked();
+  });
+
+  it('disables submission while the snapshot request is pending', async () => {
+    const browser = userEvent.setup();
+    let finishSave: ((value: typeof game) => void) | undefined;
+    mocks.saveGameSnapshot.mockReturnValue(
+      new Promise<typeof game>((resolve) => {
+        finishSave = resolve;
+      })
+    );
+    renderWithProviders(<NewRankedGamePage />);
+
+    const selects = await screen.findAllByRole('combobox');
+    await browser.click(selects[0]);
+    await browser.click(screen.getByRole('option', { name: 'Tennis – Nina' }));
+    await browser.type(screen.getByRole('spinbutton', { name: 'Punkte' }), '9');
+    await browser.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    expect(
+      await screen.findByRole('button', { name: 'Speichern…' })
+    ).toBeDisabled();
+
+    finishSave?.(game);
+    await waitFor(() =>
+      expect(mocks.router.push).toHaveBeenCalledWith('/rankings')
+    );
+  });
+
   it('creates a ranked game with one snapshot request and no game ID', async () => {
     const browser = userEvent.setup();
     mocks.getGames.mockResolvedValueOnce([]);

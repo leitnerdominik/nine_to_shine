@@ -19,7 +19,6 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
 import { useSnackbar } from 'notistack';
 import {
   apiSeason,
@@ -212,12 +211,57 @@ export default function SpielNeuPage() {
         component="form"
         onSubmit={handleSubmit(onSubmit)}
         noValidate
-        sx={{ maxWidth: 900, mx: 'auto', p: 3 }}
+        sx={{
+          width: '100%',
+          maxWidth: 1180,
+          minHeight: {
+            xs: 'calc(100vh - 176px)',
+            md: 'calc(100vh - 128px)',
+          },
+          mx: 'auto',
+          pb: 4,
+        }}
       >
-        <CustomTitle text="Neues Spiel erstellen" />
+        <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+          <Typography
+            component="h1"
+            sx={{
+              color: 'text.primary',
+              fontSize: { xs: '2.5rem', sm: '3.25rem' },
+              fontWeight: 800,
+              letterSpacing: '-0.04em',
+              lineHeight: 1.05,
+            }}
+          >
+            Neues Spiel erstellen
+          </Typography>
+          <Box
+            aria-hidden="true"
+            sx={{
+              width: 40,
+              height: 6,
+              mt: 1.25,
+              borderRadius: 999,
+              bgcolor: 'primary.main',
+            }}
+          />
+        </Box>
 
-        <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+        <Paper
+          component="section"
+          elevation={0}
+          aria-labelledby="game-selection-title"
+          sx={{ p: { xs: 2, sm: 3 }, mb: 2, borderRadius: { xs: 3, sm: 4 } }}
+        >
           <Stack spacing={2}>
+            <Typography
+              id="game-selection-title"
+              component="h2"
+              variant="overline"
+              color="text.secondary"
+            >
+              Spiel auswählen
+            </Typography>
             {/* Vorhandenes Spiel auswählen */}
             <TextField
               select
@@ -268,8 +312,29 @@ export default function SpielNeuPage() {
             </TextField>
           </Stack>
         </Paper>
-        <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-          <Stack spacing={2}>
+
+        <Paper
+          component="section"
+          elevation={0}
+          aria-labelledby="game-details-title"
+          sx={{ p: { xs: 2, sm: 3 }, mb: 2, borderRadius: { xs: 3, sm: 4 } }}
+        >
+          <Typography
+            id="game-details-title"
+            component="h2"
+            variant="overline"
+            color="text.secondary"
+            sx={{ display: 'block', mb: 2 }}
+          >
+            Spieldaten
+          </Typography>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+              gap: 2,
+            }}
+          >
             {/* Saison */}
             <Controller
               name="seasonId"
@@ -344,15 +409,43 @@ export default function SpielNeuPage() {
                 </TextField>
               )}
             />
-          </Stack>
+          </Box>
         </Paper>
 
-        <Typography variant="h6" sx={{ mb: 1 }}>
-          Punkte pro Spieler
-        </Typography>
+        <Paper
+          component="section"
+          elevation={0}
+          aria-labelledby="player-points-title"
+          sx={{ p: { xs: 2, sm: 3 }, borderRadius: { xs: 3, sm: 4 } }}
+        >
+          <Typography
+            id="player-points-title"
+            component="h2"
+            variant="h6"
+            sx={{ mb: 2.5 }}
+          >
+            Punkte pro Spieler
+          </Typography>
 
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Stack spacing={2} divider={<Divider />}>
+          <Box
+            aria-hidden="true"
+            sx={{
+              display: { xs: 'none', sm: 'grid' },
+              gridTemplateColumns: 'minmax(0, 2fr) minmax(150px, 1fr) minmax(120px, 0.7fr)',
+              gap: 2,
+              px: 1,
+              pb: 1.5,
+              color: 'text.secondary',
+            }}
+          >
+            {['Name', 'Anwesenheit', 'Punkte'].map((label) => (
+              <Typography key={label} variant="overline">
+                {label}
+              </Typography>
+            ))}
+          </Box>
+
+          <Stack divider={<Divider />}>
             {entriesWatch?.map((entry, idx) => {
               const name =
                 userLabel.get(entry.userId) ?? `Spieler #${entry.userId}`;
@@ -360,11 +453,19 @@ export default function SpielNeuPage() {
               return (
                 <Stack
                   key={entry.userId}
-                  direction={{ xs: 'column', sm: 'row' }}
-                  spacing={2}
-                  alignItems="center"
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: 'minmax(0, 1fr)',
+                      sm: 'minmax(0, 2fr) minmax(150px, 1fr) minmax(120px, 0.7fr)',
+                    },
+                    gap: { xs: 1.5, sm: 2 },
+                    alignItems: 'center',
+                    px: 1,
+                    py: 2,
+                  }}
                 >
-                  <Typography sx={{ flex: 2 }}>{name}</Typography>
+                  <Typography fontWeight={600}>{name}</Typography>
 
                   <FormControlLabel
                     control={
@@ -382,7 +483,7 @@ export default function SpielNeuPage() {
                       />
                     }
                     label="Anwesend"
-                    sx={{ m: 0, flex: 1 }}
+                    sx={{ m: 0 }}
                   />
 
                   <TextField
@@ -402,7 +503,7 @@ export default function SpielNeuPage() {
                         shrink: true,
                       },
                     }}
-                    sx={{ flex: 1 }}
+                    fullWidth
                     disabled={disabled}
                   />
                 </Stack>
@@ -411,7 +512,12 @@ export default function SpielNeuPage() {
           </Stack>
         </Paper>
 
-        <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
+        <Stack
+          direction={{ xs: 'column-reverse', sm: 'row' }}
+          justifyContent="flex-end"
+          spacing={2}
+          sx={{ mt: 3 }}
+        >
           <Button
             type="button"
             variant="outlined"
@@ -429,6 +535,13 @@ export default function SpielNeuPage() {
                 })),
               });
             }}
+            sx={{
+              width: { xs: '100%', sm: 'auto' },
+              borderRadius: 999,
+              px: 3,
+              textTransform: 'none',
+              fontWeight: 700,
+            }}
           >
             Zurücksetzen
           </Button>
@@ -440,6 +553,13 @@ export default function SpielNeuPage() {
             startIcon={
               isSubmitting ? <CircularProgress size={18} /> : <AddIcon />
             }
+            sx={{
+              width: { xs: '100%', sm: 'auto' },
+              borderRadius: 999,
+              px: 3,
+              textTransform: 'none',
+              fontWeight: 700,
+            }}
           >
             {isSubmitting ? 'Speichern…' : 'Speichern'}
           </Button>
