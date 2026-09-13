@@ -229,7 +229,7 @@ describe('RankingsPage season totals', () => {
     expect(bowlingRow).toHaveAttribute('href', '/rankings/10');
     expect(within(bowlingRow).getByText('🎳')).toBeInTheDocument();
     expect(within(bowlingRow).getByText('01.07.2026')).toBeInTheDocument();
-    expect(within(bowlingRow).getByText('2 Teilnehmer')).toBeInTheDocument();
+    expect(within(bowlingRow).getByText('2')).toBeInTheDocument();
     expect(within(bowlingRow).getByText('Miriam')).toBeInTheDocument();
 
     const fallbackRow = screen.getByRole('link', {
@@ -237,7 +237,7 @@ describe('RankingsPage season totals', () => {
     });
     expect(fallbackRow).toHaveAttribute('href', '/rankings/11');
     expect(within(fallbackRow).getByText('🎮')).toBeInTheDocument();
-    expect(within(fallbackRow).getByText('0 Teilnehmer')).toBeInTheDocument();
+    expect(within(fallbackRow).getByText('0')).toBeInTheDocument();
     expect(within(fallbackRow).getByText('–')).toBeInTheDocument();
   });
 
