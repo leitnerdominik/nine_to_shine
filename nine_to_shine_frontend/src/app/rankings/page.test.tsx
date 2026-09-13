@@ -1,5 +1,6 @@
 import React from 'react';
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/test-utils';
 import RankingsPage from './page';
@@ -120,5 +121,71 @@ describe('RankingsPage season totals', () => {
     expect(within(rows[0]).getByText('10')).toBeInTheDocument();
     expect(within(rows[1]).getByText('5')).toBeInTheDocument();
     expect(within(table).queryByText('15')).not.toBeInTheDocument();
+  });
+
+  it('shows the selected season even when only one season exists', async () => {
+    renderWithProviders(<RankingsPage />);
+
+    const seasonButton = await screen.findByRole('button', {
+      name: 'Saison 7',
+    });
+
+    expect(seasonButton).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('updates the season query when another season is selected', async () => {
+    const user = userEvent.setup();
+    mocks.getSeasons.mockResolvedValue([
+      { id: 3, seasonNumber: 7 },
+      { id: 4, seasonNumber: 6 },
+    ]);
+
+    renderWithProviders(<RankingsPage />);
+
+    await user.click(await screen.findByRole('button', { name: 'Saison 6' }));
+
+    expect(mocks.replace).toHaveBeenCalledWith('/rankings?season=6');
+  });
+
+  it('keeps the leaderboard and secondary ranking actions accessible', async () => {
+    renderWithProviders(<RankingsPage />);
+
+    const table = await screen.findByRole('table', {
+      name: 'Saison-Gesamtpunkte',
+    });
+
+    expect(
+      within(table).getByRole('columnheader', { name: 'Platz' })
+    ).toBeInTheDocument();
+    expect(
+      within(table).getByRole('columnheader', { name: 'Name' })
+    ).toBeInTheDocument();
+    expect(
+      within(table).getByRole('columnheader', { name: 'Punkte' })
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Pokal für Platz 1')).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', {
+        name: 'Übersichtstabelle aller Spiele öffnen',
+      })
+    ).toHaveAttribute('href', '/rankings/overview?season=7');
+    expect(screen.getByRole('link', { name: 'Neu' })).toHaveAttribute(
+      'href',
+      '/rankings/game/new'
+    );
+  });
+
+  it('shows the ranking and games empty states', async () => {
+    mocks.getGames.mockResolvedValue([]);
+    mocks.getRankings.mockResolvedValue([]);
+
+    renderWithProviders(<RankingsPage />);
+
+    expect(
+      await screen.findByText('Keine Daten für diese Saison.')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Keine Spiele in dieser Saison vorhanden.')
+    ).toBeInTheDocument();
   });
 });

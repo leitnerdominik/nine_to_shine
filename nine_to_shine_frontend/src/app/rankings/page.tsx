@@ -20,6 +20,7 @@ import {
   Typography,
   useTheme,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import dayjs from 'dayjs';
@@ -27,7 +28,6 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useSnackbar } from 'notistack';
 
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
 import EntryTile from '@/components/EntryTile';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 
@@ -170,152 +170,163 @@ const RankingsPage = () => {
 
   return (
     <Layout>
-      {loading ? (
-        <LoadingSkeleton />
-      ) : (
-        <>
-          {/* Header */}
-          <Stack
-            direction="column"
-            alignItems="flex-start"
-            justifyContent="space-between"
-            spacing={2}
-            sx={{ mb: 4 }}
-          >
-            <CustomTitle text="Rangliste" />
-            <Typography variant="h5" component="h3" color="text.secondary">
-              {selectedSeasonNumber != null
-                ? `Saison ${selectedSeasonNumber}`
-                : 'Saison –'}
-            </Typography>
-            {/* overview button moved below the table */}
-            <Button
-              component={NextLink}
-              href={
-                selectedSeasonNumber != null
-                  ? `/rankings/overview?season=${selectedSeasonNumber}`
-                  : '/rankings/overview'
-              }
-              variant="outlined"
-              sx={{ display: 'none' }}
-            >
-              Übersichtstabelle aller Spiele
-            </Button>
-          </Stack>
+      <Box
+        sx={{
+          minHeight: { xs: 'calc(100vh - 176px)', md: 'calc(100vh - 128px)' },
+          mx: { xs: -1.5, sm: 0 },
+          px: { xs: 1.5, sm: 0 },
+          pb: 4,
+        }}
+      >
+        {loading ? (
+          <LoadingSkeleton />
+        ) : (
+          <Box sx={{ width: '100%', maxWidth: 1180, mx: 'auto' }}>
+            <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+              <Typography
+                component="h1"
+                sx={{
+                  color: 'text.primary',
+                  fontSize: { xs: '2.5rem', sm: '3.25rem' },
+                  fontWeight: 800,
+                  letterSpacing: '-0.04em',
+                  lineHeight: 1.05,
+                }}
+              >
+                Rangliste
+              </Typography>
+              <Box
+                aria-hidden="true"
+                sx={{
+                  width: 40,
+                  height: 6,
+                  mt: 1.25,
+                  mb: 1.75,
+                  borderRadius: 999,
+                  bgcolor: 'primary.main',
+                }}
+              />
 
-          {/* Saison-Auswahl */}
-          {seasonNumbers.length > 1 && selectedSeasonNumber != null && (
-            <Stack
-              direction="row"
-              flexWrap="wrap"
-              gap={1}
-              sx={{ mb: 3 }}
-            >
-              {seasonNumbers.map((num) => {
-                const isSelected = num === selectedSeasonNumber;
-                return (
-                  <Button
-                    key={num}
-                    variant={isSelected ? 'contained' : 'outlined'}
-                    onClick={() => setSeasonNumber(num)}
-                    sx={{
-                      borderRadius: 20,
-                      px: 3,
-                      boxShadow: isSelected
-                        ? '0 4px 10px rgba(0,0,0,0.2)'
-                        : 'none',
-                      textTransform: 'none',
-                      fontWeight: isSelected ? 'bold' : 'normal',
-                    }}
-                  >
-                    Saison {num}
-                  </Button>
-                );
-              })}
-            </Stack>
-          )}
+              {selectedSeasonNumber != null ? (
+                <Stack direction="row" flexWrap="wrap" gap={1.25}>
+                  {seasonNumbers.map((num) => {
+                    const isSelected = num === selectedSeasonNumber;
+                    return (
+                      <Button
+                        key={num}
+                        variant={isSelected ? 'contained' : 'outlined'}
+                        aria-pressed={isSelected}
+                        onClick={() => setSeasonNumber(num)}
+                        sx={{
+                          minHeight: 46,
+                          borderRadius: 999,
+                          px: { xs: 2.5, sm: 3.25 },
+                          textTransform: 'none',
+                          fontSize: '1rem',
+                          fontWeight: 700,
+                          borderColor: 'primary.main',
+                        }}
+                      >
+                        Saison {num}
+                      </Button>
+                    );
+                  })}
+                </Stack>
+              ) : (
+                <Typography color="text.secondary">Saison –</Typography>
+              )}
+            </Box>
 
-          {/* Tabelle: Totals der ausgewählten Saison */}
-          <Box sx={{ mb: 6 }}>
             <TableContainer
               component={Paper}
               sx={{
-                borderRadius: 4,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                overflow: 'hidden',
+                mb: 2,
+                p: { xs: 1.25, sm: 2 },
+                borderRadius: { xs: 3, sm: 4 },
+                boxShadow: 'none',
+                overflowX: 'auto',
               }}
             >
-              <Table aria-label="Saison-Gesamtpunkte">
+              <Table
+                aria-label="Saison-Gesamtpunkte"
+                sx={{ borderCollapse: 'separate', borderSpacing: '0 5px' }}
+              >
                 <TableHead
                   sx={{
-                    background: `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.primary.light} 90%)`,
-                    color: theme.palette.primary.contrastText,
+                    '& .MuiTableCell-root': {
+                      borderBottom: 0,
+                      color: 'text.secondary',
+                      fontSize: '0.75rem',
+                      fontWeight: 800,
+                      letterSpacing: '0.1em',
+                      textTransform: 'uppercase',
+                    },
                   }}
                 >
                   <TableRow>
-                    <TableCell
-                      sx={{
-                        fontWeight: 700,
-                        color: 'inherit',
-                        fontSize: '1rem',
-                      }}
-                    >
+                    <TableCell sx={{ width: { xs: 110, sm: 190 } }}>
                       Platz
                     </TableCell>
-                    <TableCell
-                      sx={{
-                        fontWeight: 700,
-                        color: 'inherit',
-                        fontSize: '1rem',
-                      }}
-                    >
-                      Name
-                    </TableCell>
-                    <TableCell
-                      sx={{
-                        fontWeight: 700,
-                        color: 'inherit',
-                        fontSize: '1rem',
-                      }}
-                    >
+                    <TableCell>Name</TableCell>
+                    <TableCell align="right" sx={{ width: { xs: 80, sm: 120 } }}>
                       Punkte
                     </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {totalsForSeason.map((total, idx) => {
-                    const { iconColor, bgColor } = getRankStyle(idx);
+                    const { iconColor } = getRankStyle(idx);
+                    const rowBackground =
+                      idx === 0
+                        ? alpha(theme.palette.primary.main, 0.09)
+                        : idx === 1
+                          ? alpha('#C0C0C0', 0.08)
+                          : idx === 2
+                            ? alpha('#CD7F32', 0.07)
+                            : 'transparent';
+                    const isPodium = idx < 3;
+
                     return (
                       <TableRow
                         key={total.userId}
                         sx={{
-                          backgroundColor: bgColor,
-                          '&:hover': {
-                            backgroundColor: 'rgba(0,0,0,0.04)',
+                          '& > .MuiTableCell-root': {
+                            bgcolor: rowBackground,
+                            borderBottom: isPodium ? 0 : 1,
+                            borderColor: 'divider',
+                            transition: 'background-color 160ms ease',
+                          },
+                          '& > .MuiTableCell-root:first-of-type': {
+                            borderRadius: isPodium ? '12px 0 0 12px' : 0,
+                          },
+                          '& > .MuiTableCell-root:last-of-type': {
+                            borderRadius: isPodium ? '0 12px 12px 0' : 0,
+                          },
+                          '&:hover > .MuiTableCell-root': {
+                            bgcolor: alpha(theme.palette.primary.main, 0.075),
                           },
                         }}
                       >
                         <TableCell>
-                          <Stack
-                            direction="row"
-                            alignItems="center"
-                            spacing={1}
-                          >
-                            <Typography fontWeight={idx < 3 ? 'bold' : 'normal'}>
+                          <Stack direction="row" alignItems="center" spacing={1.5}>
+                            <Typography fontWeight={isPodium ? 800 : 600}>
                               #{idx + 1}
                             </Typography>
-                            {idx < 3 && (
-                              <EmojiEventsIcon sx={{ color: iconColor }} />
+                            {isPodium && (
+                              <EmojiEventsIcon
+                                aria-label={`Pokal für Platz ${idx + 1}`}
+                                sx={{ color: iconColor, fontSize: '1.65rem' }}
+                              />
                             )}
                           </Stack>
                         </TableCell>
                         <TableCell>
-                          <Typography fontWeight={idx < 3 ? 'bold' : 'normal'}>
+                          <Typography fontWeight={isPodium ? 800 : 500}>
                             {total.displayName}
                           </Typography>
                         </TableCell>
-                        <TableCell>
-                          <Typography fontWeight={idx < 3 ? 'bold' : 'normal'}>
+                        <TableCell align="right">
+                          <Typography fontWeight={isPodium ? 800 : 500}>
                             {total.points}
                           </Typography>
                         </TableCell>
@@ -324,73 +335,74 @@ const RankingsPage = () => {
                   })}
                   {totalsForSeason.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={3}>
-                        <Typography variant="body2" sx={{ p: 2 }}>
+                      <TableCell colSpan={3} sx={{ borderBottom: 0 }}>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ py: 4, textAlign: 'center' }}
+                        >
                           Keine Daten für diese Saison.
                         </Typography>
                       </TableCell>
                     </TableRow>
-                )}
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>
-            <Button
-              component={NextLink}
-              href={
-                selectedSeasonNumber != null
-                  ? `/rankings/overview?season=${selectedSeasonNumber}`
-                  : '/rankings/overview'
-              }
-              variant="contained"
-              fullWidth
+
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 5 }}>
+              <Button
+                component={NextLink}
+                href={
+                  selectedSeasonNumber != null
+                    ? `/rankings/overview?season=${selectedSeasonNumber}`
+                    : '/rankings/overview'
+                }
+                variant="outlined"
+                sx={{
+                  borderRadius: 999,
+                  px: 2.5,
+                  textTransform: 'none',
+                  fontWeight: 700,
+                  bgcolor: alpha(theme.palette.background.paper, 0.84),
+                }}
+              >
+                Übersichtstabelle aller Spiele öffnen
+              </Button>
+            </Box>
+
+            <Divider sx={{ mb: 4 }} />
+
+            <Typography variant="h5" component="h2" sx={{ mb: 3 }}>
+              Spiele
+            </Typography>
+            <Box
               sx={{
-                mt: 2,
-                py: 1.5,
-                px: 2,
-                borderRadius: 3,
-                textTransform: 'none',
-                fontSize: '1rem',
-                fontWeight: 700,
-                boxShadow: '0 10px 24px rgba(0,0,0,0.14)',
-                background: `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
+                display: 'flex',
+                flexDirection: { xs: 'column', sm: 'row' },
+                flexWrap: 'wrap',
+                gap: 3,
+                justifyContent: 'center',
               }}
             >
-              Übersichtstabelle aller Spiele öffnen
-            </Button>
+              {gameEntriesForTiles.map((g) => (
+                <EntryTile
+                  key={g.id}
+                  id={g.id}
+                  date={g.date}
+                  title={g.title}
+                  baseRoute="/rankings"
+                />
+              ))}
+              {gameEntriesForTiles.length === 0 && (
+                <Typography variant="body2" color="text.secondary">
+                  Keine Spiele in dieser Saison vorhanden.
+                </Typography>
+              )}
+            </Box>
           </Box>
-
-          <Divider sx={{ my: 4 }} />
-
-          {/* Spiele dieser Saison */}
-          <Typography variant="h5" component="h4" gutterBottom sx={{ mb: 3 }}>
-            Spiele
-          </Typography>
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: { xs: 'column', sm: 'row' },
-              flexWrap: 'wrap',
-              gap: 3,
-              justifyContent: 'center',
-            }}
-          >
-            {gameEntriesForTiles.map((g) => (
-              <EntryTile
-                key={g.id}
-                id={g.id}
-                date={g.date}
-                title={g.title}
-                baseRoute="/rankings"
-              />
-            ))}
-            {gameEntriesForTiles.length === 0 && (
-              <Typography variant="body2" color="text.secondary">
-                Keine Spiele in dieser Saison vorhanden.
-              </Typography>
-            )}
-          </Box>
-        </>
-      )}
+        )}
+      </Box>
 
       <Tooltip title="Neues Spiel hinzufügen" placement="left">
         <Fab
@@ -401,7 +413,10 @@ const RankingsPage = () => {
           sx={{
             position: 'fixed',
             right: { xs: 16, md: 24 },
-            bottom: { xs: 16, md: 24 },
+            bottom: {
+              xs: 'calc(88px + env(safe-area-inset-bottom))',
+              md: 24,
+            },
             zIndex: (t) => t.zIndex.tooltip + 1,
             boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
           }}
