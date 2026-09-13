@@ -175,6 +175,37 @@ describe('DashboardPage', () => {
     expect(openCount.closest('a')).toHaveAttribute('href', '/finance/dues');
   });
 
+  it('aggregates open payments across multiple affected games', async () => {
+    mocks.getDuesStatus.mockResolvedValue([
+      {
+        gameId: 10,
+        seasonId: 5,
+        playedAt: '2026-07-15T18:00:00.000Z',
+        gameName: 'First open game',
+        activeMemberCount: 3,
+        paidMemberCount: 1,
+        unpaidMembers: [
+          { userId: 2, displayName: 'Alex' },
+          { userId: 3, displayName: 'Bob' },
+        ],
+      },
+      {
+        gameId: 11,
+        seasonId: 5,
+        playedAt: '2026-08-15T18:00:00.000Z',
+        gameName: 'Second open game',
+        activeMemberCount: 3,
+        paidMemberCount: 2,
+        unpaidMembers: [{ userId: 2, displayName: 'Alex' }],
+      },
+    ]);
+
+    renderWithProviders(<DashboardPage />);
+
+    expect(await screen.findByText('3 offen')).toBeInTheDocument();
+    expect(screen.getByText('2 Spiele betroffen')).toBeInTheDocument();
+  });
+
   it('shows the all-paid state when no payments are open', async () => {
     mocks.getDuesStatus.mockResolvedValue([
       {

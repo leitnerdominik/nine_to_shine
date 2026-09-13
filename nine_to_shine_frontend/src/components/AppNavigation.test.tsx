@@ -39,6 +39,7 @@ const user: NavigationUser = {
 
 describe('AppNavigation', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     mocks.pathname = '/';
     mocks.signOut.mockResolvedValue(undefined);
   });
@@ -153,5 +154,43 @@ describe('AppNavigation', () => {
     expect(
       screen.queryByRole('button', { name: 'Benutzermenü öffnen' })
     ).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [{ displayName: null, email: 'max.mustermann@example.com' }, 'MM'],
+    [{ displayName: null, email: null }, '?'],
+  ] satisfies Array<[NavigationUser, string]>)(
+    'derives accessible account initials from available user data',
+    (navigationUser, expectedInitials) => {
+      renderWithProviders(<AppNavigation user={navigationUser} />);
+
+      expect(screen.getByText(expectedInitials)).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Benutzermenü öffnen' })
+      ).toBeInTheDocument();
+    }
+  );
+
+  it('opens and closes the account menu from the keyboard', async () => {
+    const interaction = userEvent.setup();
+    renderWithProviders(<AppNavigation user={user} />);
+
+    const accountButton = screen.getByRole('button', {
+      name: 'Benutzermenü öffnen',
+    });
+    accountButton.focus();
+    await interaction.keyboard('{Enter}');
+
+    expect(
+      screen.getByRole('menu', { name: 'Benutzeraktionen' })
+    ).toBeInTheDocument();
+
+    await interaction.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('menu', { name: 'Benutzeraktionen' })
+      ).not.toBeInTheDocument()
+    );
+    expect(accountButton).toHaveFocus();
   });
 });
