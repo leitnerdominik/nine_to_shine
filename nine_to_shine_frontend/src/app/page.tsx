@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { Box, Typography } from '@mui/material';
-import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
-import SavingsIcon from '@mui/icons-material/Savings';
 import dayjs from 'dayjs';
 import 'dayjs/locale/de';
 
@@ -162,7 +160,6 @@ export default function DashboardPage() {
                     : 'Keine offenen Spielbeiträge'
               }
               href={routes.duesOverview}
-              icon={<SavingsIcon />}
               tone={duesTone}
             />
 
@@ -175,7 +172,6 @@ export default function DashboardPage() {
                   : 'Keiner Eingetragen!'
               }
               href={routes.organizeduties}
-              icon={<CleaningServicesIcon />}
               tone="info"
             />
           </Box>

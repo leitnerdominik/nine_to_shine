@@ -33,7 +33,7 @@ export default function DashboardSkeleton() {
           sx={{
             height: '100%',
             minHeight: { xs: 300, sm: 340, md: 390 },
-            borderRadius: 2.5,
+            borderRadius: '18px',
           }}
         />
 
@@ -61,7 +61,7 @@ export default function DashboardSkeleton() {
               sx={{
                 height: '100%',
                 minHeight: { xs: 150, sm: 170, md: 0 },
-                borderRadius: 2.5,
+                borderRadius: '18px',
               }}
             />
           ))}

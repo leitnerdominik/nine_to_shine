@@ -1,6 +1,4 @@
-import type { ReactNode } from 'react';
 import Link from 'next/link';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import {
   alpha,
   Box,
@@ -31,52 +29,51 @@ type DashboardStatusCardProps = {
   value: string;
   detail: string;
   href: string;
-  icon: ReactNode;
   tone: DashboardStatusTone;
 };
 
 const interactiveCardStyles = {
   height: '100%',
-  borderRadius: 2.5,
+  borderRadius: '18px',
   border: 1,
   overflow: 'hidden',
+  boxShadow: '0 10px 28px rgba(7, 17, 47, 0.06)',
   transition: 'transform 180ms ease, box-shadow 180ms ease',
   '@media (hover: hover) and (pointer: fine)': {
     '&:hover': {
       transform: 'translateY(-2px)',
-      boxShadow: 4,
+      boxShadow: '0 14px 34px rgba(7, 17, 47, 0.1)',
     },
   },
+} as const;
+
+const dashboardSurfaces = {
+  leaderStart: '#087FF5',
+  leaderEnd: '#006FF2',
+  neutral: '#F4F5F7',
+  info: '#E4F2FF',
 } as const;
 
 function getStatusTone(theme: Theme, tone: DashboardStatusTone) {
   switch (tone) {
     case 'info':
       return {
-        surface: alpha(theme.palette.primary.main, 0.08),
-        iconSurface: alpha(theme.palette.primary.main, 0.14),
-        iconColor: theme.palette.primary.dark,
+        surface: dashboardSurfaces.info,
         borderColor: alpha(theme.palette.primary.main, 0.18),
       };
     case 'warning':
       return {
-        surface: alpha(theme.palette.warning.main, 0.08),
-        iconSurface: alpha(theme.palette.warning.main, 0.18),
-        iconColor: theme.palette.warning.dark,
-        borderColor: alpha(theme.palette.warning.main, 0.24),
+        surface: dashboardSurfaces.neutral,
+        borderColor: theme.palette.divider,
       };
     case 'success':
       return {
-        surface: alpha(theme.palette.success.main, 0.08),
-        iconSurface: alpha(theme.palette.success.main, 0.16),
-        iconColor: theme.palette.success.dark,
-        borderColor: alpha(theme.palette.success.main, 0.22),
+        surface: dashboardSurfaces.neutral,
+        borderColor: theme.palette.divider,
       };
     case 'neutral':
       return {
-        surface: theme.palette.background.paper,
-        iconSurface: theme.palette.grey[200],
-        iconColor: theme.palette.grey[700],
+        surface: dashboardSurfaces.neutral,
         borderColor: theme.palette.divider,
       };
   }
@@ -91,11 +88,12 @@ export function DashboardLeaderCard({
 }: DashboardLeaderCardProps) {
   return (
     <Card
-      elevation={1}
+      elevation={0}
       sx={(theme) => ({
         ...interactiveCardStyles,
+        minHeight: { xs: 300, sm: 340, md: 390 },
         borderColor: alpha(theme.palette.primary.contrastText, 0.16),
-        background: `linear-gradient(145deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+        background: `linear-gradient(145deg, ${dashboardSurfaces.leaderStart} 0%, ${dashboardSurfaces.leaderEnd} 100%)`,
         color: 'primary.contrastText',
       })}
     >
@@ -111,29 +109,32 @@ export function DashboardLeaderCard({
           },
         }}
       >
-        <CardContent sx={{ height: '100%', p: { xs: 2.5, sm: 3 } }}>
-          <Stack spacing={{ xs: 2.5, sm: 3 }} sx={{ height: '100%' }}>
-            <Typography variant="overline" sx={{ opacity: 0.86 }}>
+        <CardContent sx={{ height: '100%', p: { xs: 2.5, sm: 3.5 } }}>
+          <Stack spacing={{ xs: 2.25, sm: 3 }} sx={{ height: '100%' }}>
+            <Typography
+              variant="overline"
+              sx={{ color: 'inherit', fontWeight: 800, opacity: 0.92 }}
+            >
               {label}
             </Typography>
 
             <Box
               aria-hidden="true"
               sx={(theme) => ({
-                width: { xs: 72, sm: 88 },
-                height: { xs: 72, sm: 88 },
-                borderRadius: 2.5,
+                width: { xs: 72, sm: 96 },
+                height: { xs: 72, sm: 96 },
+                borderRadius: '18px',
                 display: 'grid',
                 placeItems: 'center',
-                bgcolor: alpha(theme.palette.primary.contrastText, 0.14),
+                bgcolor: alpha(theme.palette.primary.contrastText, 0.16),
               })}
             >
-              <EmojiEventsIcon
-                sx={{
-                  color: 'warning.light',
-                  fontSize: { xs: 42, sm: 52 },
-                }}
-              />
+              <Box
+                component="span"
+                sx={{ fontSize: { xs: 42, sm: 54 }, lineHeight: 1 }}
+              >
+                🏆
+              </Box>
             </Box>
 
             <Box sx={{ mt: 'auto', minWidth: 0 }}>
@@ -142,14 +143,18 @@ export function DashboardLeaderCard({
                   <Typography
                     variant="h3"
                     sx={{
-                      fontSize: { xs: '2rem', sm: '2.75rem' },
+                      fontSize: { xs: '2.25rem', sm: '3rem' },
+                      fontWeight: 800,
                       overflowWrap: 'anywhere',
                     }}
                   >
                     {name}
                   </Typography>
                   {points && (
-                    <Typography variant="h5" sx={{ mt: 0.5, opacity: 0.9 }}>
+                    <Typography
+                      variant="h5"
+                      sx={{ mt: 0.5, fontWeight: 400, opacity: 0.92 }}
+                    >
                       {points}
                     </Typography>
                   )}
@@ -172,12 +177,11 @@ export function DashboardStatusCard({
   value,
   detail,
   href,
-  icon,
   tone,
 }: DashboardStatusCardProps) {
   return (
     <Card
-      elevation={1}
+      elevation={0}
       sx={(theme) => {
         const colors = getStatusTone(theme, tone);
 
@@ -201,42 +205,17 @@ export function DashboardStatusCard({
         }}
       >
         <CardContent sx={{ height: '100%', p: { xs: 2, sm: 2.5, md: 3 } }}>
-          <Stack
-            direction="row"
-            spacing={{ xs: 0, sm: 2 }}
-            alignItems="center"
-            sx={{ height: '100%' }}
-          >
-            <Box
-              aria-hidden="true"
-              sx={(theme) => {
-                const colors = getStatusTone(theme, tone);
-
-                return {
-                  width: 56,
-                  height: 56,
-                  flexShrink: 0,
-                  display: { xs: 'none', sm: 'grid' },
-                  borderRadius: 2,
-                  placeItems: 'center',
-                  bgcolor: colors.iconSurface,
-                  color: colors.iconColor,
-                  '& svg': { fontSize: 30 },
-                };
-              }}
-            >
-              {icon}
-            </Box>
-
+          <Stack justifyContent="center" sx={{ height: '100%', minWidth: 0 }}>
             <Box sx={{ minWidth: 0 }}>
-              <Typography variant="overline" color="text.secondary">
+              <Typography variant="overline" color="text.primary">
                 {label}
               </Typography>
               <Typography
                 variant="h4"
                 sx={{
-                  mt: 0.25,
-                  fontSize: { xs: '1.65rem', sm: '2rem', md: '2.125rem' },
+                  mt: 1.75,
+                  fontSize: { xs: '2rem', sm: '2.5rem', md: '2.75rem' },
+                  fontWeight: 800,
                   overflowWrap: 'anywhere',
                 }}
               >
@@ -245,7 +224,7 @@ export function DashboardStatusCard({
               <Typography
                 variant="body2"
                 color="text.secondary"
-                sx={{ mt: 0.5 }}
+                sx={{ mt: 0.75, fontSize: { sm: '1rem' } }}
               >
                 {detail}
               </Typography>
