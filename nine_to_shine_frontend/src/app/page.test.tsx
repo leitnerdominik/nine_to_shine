@@ -1,5 +1,5 @@
 import React from 'react';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/test-utils';
 import DashboardPage from './page';
@@ -23,9 +23,16 @@ vi.mock('@/components/Layout', () => ({
     React.createElement(React.Fragment, null, children),
 }));
 
-vi.mock('@/components/LoadingSkeleton', () => ({
-  default: () => React.createElement('div', null, 'Loading dashboard'),
-}));
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return { promise, resolve, reject };
+}
 
 describe('DashboardPage', () => {
   beforeEach(() => {
@@ -34,6 +41,68 @@ describe('DashboardPage', () => {
     mocks.getTopRanked.mockResolvedValue(null);
     mocks.getNextDuty.mockResolvedValue(null);
     mocks.getDuesStatus.mockResolvedValue([]);
+  });
+
+  it('shows the dashboard skeleton until all summary requests settle', async () => {
+    const duesRequest = deferred<[]>();
+    mocks.getDuesStatus.mockReturnValue(duesRequest.promise);
+
+    renderWithProviders(<DashboardPage />);
+
+    const loadingStatus = screen.getByRole('status', {
+      name: 'Dashboard wird geladen',
+    });
+    expect(loadingStatus).toHaveAttribute('aria-busy', 'true');
+    await waitFor(() => expect(mocks.getDuesStatus).toHaveBeenCalledWith(5));
+    expect(loadingStatus).toBeInTheDocument();
+
+    await act(async () => {
+      duesRequest.resolve([]);
+    });
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('status', { name: 'Dashboard wird geladen' })
+      ).not.toBeInTheDocument()
+    );
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Saison 7' })
+    ).toBeInTheDocument();
+  });
+
+  it('shows the existing fallbacks after a dashboard request fails', async () => {
+    mocks.getDuesStatus.mockRejectedValueOnce(new Error('Request failed'));
+
+    renderWithProviders(<DashboardPage />);
+
+    expect(
+      await screen.findByText('Fehler beim Laden des Dashboards')
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('status', { name: 'Dashboard wird geladen' })
+      ).not.toBeInTheDocument()
+    );
+    expect(screen.getByText('Noch keine Punkte')).toBeInTheDocument();
+    expect(screen.getByText('Nicht verfügbar')).toBeInTheDocument();
+    expect(screen.getByText('Frei!')).toBeInTheDocument();
+  });
+
+  it('keeps the successful empty state when no season exists', async () => {
+    mocks.getSeasons.mockResolvedValue([]);
+
+    renderWithProviders(<DashboardPage />);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Saison –' })
+    ).toBeInTheDocument();
+    expect(mocks.getTopRanked).toHaveBeenCalledWith(undefined);
+    expect(mocks.getNextDuty).toHaveBeenCalledTimes(1);
+    expect(mocks.getDuesStatus).not.toHaveBeenCalled();
+    expect(screen.getByText('Noch keine Punkte')).toBeInTheDocument();
+    expect(screen.getByText('Alles bezahlt')).toBeInTheDocument();
+    expect(screen.getByText('Keine offenen Spielbeiträge')).toBeInTheDocument();
+    expect(screen.getByText('Frei!')).toBeInTheDocument();
   });
 
   it('uses the highest season and preserves summary navigation', async () => {

@@ -20,7 +20,7 @@ import type {
   OrganizerDutyDto,
 } from '@/definitions/types';
 import { useSnackbar } from 'notistack';
-import LoadingSkeleton from '@/components/LoadingSkeleton';
+import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton';
 import { routes } from '@/common/routes';
 import {
   DashboardLeaderCard,
@@ -86,7 +86,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <Layout>
-        <LoadingSkeleton />
+        <DashboardSkeleton />
       </Layout>
     );
   }
