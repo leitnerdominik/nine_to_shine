@@ -247,6 +247,7 @@ describe('RankingsPage season totals', () => {
   it.each([
     ['Sudoku', '🔢'],
     ['Basketball Freiwürfe', '🏀'],
+    ['Volleyball', '🏐'],
     ['Stadt-Land-Fluss', '🗺️'],
     ['Calcetto', '⚽'],
     ['Trackmania', '🏎️'],
@@ -255,7 +256,9 @@ describe('RankingsPage season totals', () => {
     ['Minigolf', '⛳'],
     ['Minigold', '⛳'],
     ['Cornhole', '🎯'],
-    ['Warzone', '🎮'],
+    ['Boccia', '🔴'],
+    ['Warzone', '🪖'],
+    ['Billard', '🎱'],
     ['Watten', '🃏'],
     ['Poker', '🃏'],
     ['Eisstockschießen', '🥌'],

@@ -4,6 +4,7 @@ const GAME_EMOJI_RULES: ReadonlyArray<{
 }> = [
   { keywords: ['sudoku'], emoji: '🔢' },
   { keywords: ['basketball'], emoji: '🏀' },
+  { keywords: ['volleyball'], emoji: '🏐' },
   { keywords: ['stadt-land-fluss', 'stadt land fluss'], emoji: '🗺️' },
   { keywords: ['calcetto'], emoji: '⚽' },
   { keywords: ['trackmania'], emoji: '🏎️' },
@@ -11,7 +12,9 @@ const GAME_EMOJI_RULES: ReadonlyArray<{
   { keywords: ['steinschleuder'], emoji: '🎯' },
   { keywords: ['minigolf', 'minigold'], emoji: '⛳' },
   { keywords: ['cornhole'], emoji: '🎯' },
-  { keywords: ['warzone'], emoji: '🎮' },
+  { keywords: ['boccia'], emoji: '🔴' },
+  { keywords: ['warzone'], emoji: '🪖' },
+  { keywords: ['billard', 'billiard', 'poolbillard'], emoji: '🎱' },
   { keywords: ['watten', 'poker'], emoji: '🃏' },
   { keywords: ['eisstock'], emoji: '🥌' },
   { keywords: ['bowling', 'kegeln'], emoji: '🎳' },
