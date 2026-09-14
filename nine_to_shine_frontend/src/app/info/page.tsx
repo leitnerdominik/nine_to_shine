@@ -1,6 +1,6 @@
 import { routes } from '@/common/routes';
-import CustomTitle from '@/components/CustomTitle';
 import Layout from '@/components/Layout';
+import PageTitle from '@/components/PageTitle';
 import GavelIcon from '@mui/icons-material/Gavel';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import PolicyIcon from '@mui/icons-material/Policy';
@@ -40,7 +40,7 @@ export default function ChronikPage() {
   return (
     <Layout>
       <Box sx={{ width: '100%', maxWidth: 1000, mx: 'auto', pb: 4 }}>
-        <CustomTitle text="Informationen" />
+        <PageTitle title="Informationen" />
         <Grid2 container spacing={3} sx={{ mt: 2 }}>
           {infoCards.map((card) => (
             <Grid2 key={card.title} size={{ xs: 12, sm: 6, md: 4 }}>

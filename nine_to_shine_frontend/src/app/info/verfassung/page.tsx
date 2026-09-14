@@ -5,8 +5,8 @@ import {
   type ConstitutionListItem,
 } from './constitution-data';
 import PunishmentTable from '../strafenkatalog/PunishmentTable';
-import CustomTitle from '@/components/CustomTitle';
 import Layout from '@/components/Layout';
+import PageTitle from '@/components/PageTitle';
 import {
   Box,
   Divider,
@@ -305,7 +305,7 @@ export default function ConstitutionPage() {
   return (
     <Layout>
       <Box sx={{ width: '100%', maxWidth: 960, mx: 'auto', pb: 4 }}>
-        <CustomTitle text="Verfassung" />
+        <PageTitle title="Verfassung" />
 
         <Box component="section" aria-labelledby="roles-heading" sx={{ mt: 4 }}>
           <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2.5 }}>

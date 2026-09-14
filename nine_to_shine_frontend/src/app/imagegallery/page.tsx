@@ -1,8 +1,8 @@
 'use client';
 
 import { imageGallery } from './gallery-data';
-import CustomTitle from '@/components/CustomTitle';
 import Layout from '@/components/Layout';
+import PageTitle from '@/components/PageTitle';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import {
@@ -50,7 +50,9 @@ export default function ImageGalleryPage() {
   return (
     <Layout>
       <Container>
-        <CustomTitle text="Bilder" />
+        <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+          <PageTitle title="Bilder" />
+        </Box>
         <ImageList
           variant="masonry"
           cols={2}

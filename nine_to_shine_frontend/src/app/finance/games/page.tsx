@@ -18,7 +18,7 @@ import Link from 'next/link';
 import dayjs from 'dayjs';
 
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
+import PageTitle from '@/components/PageTitle';
 import { apiGame } from '@/definitions/commands';
 import type { GameDto } from '@/definitions/types';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
@@ -59,7 +59,9 @@ export default function GamesListPage() {
     return (
       <Layout>
         <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
-          <CustomTitle text="Spiele Übersicht" />
+          <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+            <PageTitle title="Spiele Übersicht" />
+          </Box>
           <Alert
             severity="error"
             action={
@@ -82,7 +84,9 @@ export default function GamesListPage() {
   return (
     <Layout>
       <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
-        <CustomTitle text="Spiele Übersicht" />
+        <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+          <PageTitle title="Spiele Übersicht" />
+        </Box>
         {games.length === 0 ? (
           <Paper
             variant="outlined"

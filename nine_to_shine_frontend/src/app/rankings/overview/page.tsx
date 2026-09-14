@@ -26,6 +26,7 @@ import { useSnackbar } from 'notistack';
 
 import Layout from '@/components/Layout';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import PageTitle from '@/components/PageTitle';
 import {
   apiGame,
   apiRanking,
@@ -208,35 +209,10 @@ export default function RankingsOverviewPage() {
                   Saison {selectedSeasonNumber ?? '–'}
                   {seasonYear == null ? '' : ` • ${seasonYear}`}
                 </Typography>
-                <Typography
-                  component="h1"
-                  sx={{
-                    color: 'text.primary',
-                    fontSize: { xs: '2.5rem', sm: '3.25rem' },
-                    fontWeight: 800,
-                    letterSpacing: '-0.04em',
-                    lineHeight: 1.05,
-                  }}
-                >
-                  Übersichtstabelle
-                </Typography>
-                <Box
-                  aria-hidden="true"
-                  sx={{
-                    width: 40,
-                    height: 6,
-                    mt: 1.25,
-                    mb: 1.75,
-                    borderRadius: 999,
-                    bgcolor: 'primary.main',
-                  }}
+                <PageTitle
+                  title="Übersichtstabelle"
+                  subtitle="Alle Spiele mit Punkten pro Spieler"
                 />
-                <Typography
-                  color="text.secondary"
-                  sx={{ fontSize: { xs: '1rem', sm: '1.15rem' } }}
-                >
-                  Alle Spiele mit Punkten pro Spieler
-                </Typography>
               </Box>
 
               <TextField

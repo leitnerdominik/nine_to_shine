@@ -30,6 +30,7 @@ import { useSnackbar } from 'notistack';
 
 import Layout from '@/components/Layout';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import PageTitle from '@/components/PageTitle';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
@@ -173,30 +174,8 @@ const RankingEntryPage: React.FC = () => {
           }}
         >
           <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
-            <Typography
-              component="h1"
-              sx={{
-                color: 'text.primary',
-                fontSize: { xs: '2.5rem', sm: '3.25rem' },
-                fontWeight: 800,
-                letterSpacing: '-0.04em',
-                lineHeight: 1.05,
-              }}
-            >
-              {game.gameName}
-            </Typography>
-            <Box
-              aria-hidden="true"
-              sx={{
-                width: 40,
-                height: 6,
-                mt: 1.25,
-                mb: 1.75,
-                borderRadius: 999,
-                bgcolor: 'primary.main',
-              }}
-            />
-            <Stack direction="row" flexWrap="wrap" gap={1}>
+            <PageTitle title={game.gameName} />
+            <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mt: 1.75 }}>
               <Chip
                 label={dayjs(game.playedAt).format('DD.MM.YYYY')}
                 size="medium"

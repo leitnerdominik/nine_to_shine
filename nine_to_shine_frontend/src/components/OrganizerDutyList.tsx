@@ -24,6 +24,7 @@ import { useSnackbar } from 'notistack';
 import { apiOrganizerDuty, apiSeason } from '@/definitions/commands';
 import type { OrganizerDutyDto, SeasonDto } from '@/definitions/types';
 import LoadingSkeleton from './LoadingSkeleton';
+import PageTitle from './PageTitle';
 
 // Deutsche Lokalisierung aktivieren
 dayjs.locale('de');
@@ -140,29 +141,9 @@ export default function OrganizerDutyList() {
                 {selectedSeasonYear == null ? '' : ` • ${selectedSeasonYear}`}
               </Typography>
             )}
-            <Typography
-              component="h1"
-              sx={{
-                color: 'text.primary',
-                fontSize: { xs: '2.5rem', sm: '3.25rem' },
-                fontWeight: 800,
-                letterSpacing: '-0.04em',
-                lineHeight: 1.05,
-              }}
-            >
-              Organisieren der Treffen
-            </Typography>
-            <Box
-              aria-hidden="true"
-              sx={{
-                width: 40,
-                height: 6,
-                mt: 1.25,
-                mb: 1.75,
-                borderRadius: 999,
-                bgcolor: 'primary.main',
-              }}
-            />
+            <Box sx={{ mb: 1.75 }}>
+              <PageTitle title="Organisieren der Treffen" />
+            </Box>
           </Box>
 
           {sortedSeasons.length > 0 ? (

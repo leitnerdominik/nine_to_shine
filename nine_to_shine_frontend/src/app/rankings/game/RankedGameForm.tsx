@@ -17,6 +17,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
 
+import PageTitle from '@/components/PageTitle';
 import type { GameDto, SeasonDto, UserDto } from '@/definitions/types';
 import {
   RANKING_POINTS_MAX,
@@ -101,28 +102,7 @@ export default function RankedGameForm({
       }}
     >
       <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
-        <Typography
-          component="h1"
-          sx={{
-            color: 'text.primary',
-            fontSize: { xs: '2.5rem', sm: '3.25rem' },
-            fontWeight: 800,
-            letterSpacing: '-0.04em',
-            lineHeight: 1.05,
-          }}
-        >
-          {title}
-        </Typography>
-        <Box
-          aria-hidden="true"
-          sx={{
-            width: 40,
-            height: 6,
-            mt: 1.25,
-            borderRadius: 999,
-            bgcolor: 'primary.main',
-          }}
-        />
+        <PageTitle title={title} />
       </Box>
 
       {existingGameSelection && (
