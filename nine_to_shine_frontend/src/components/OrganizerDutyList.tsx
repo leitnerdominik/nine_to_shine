@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box,
-  Button,
   Chip,
+  MenuItem,
   Paper,
   Stack,
   Table,
@@ -13,23 +13,23 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Typography,
-  useTheme,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import dayjs from 'dayjs';
 import 'dayjs/locale/de';
 import { useSnackbar } from 'notistack';
 
-import CustomTitle from '@/components/CustomTitle';
 import { apiOrganizerDuty, apiSeason } from '@/definitions/commands';
 import type { OrganizerDutyDto, SeasonDto } from '@/definitions/types';
 import LoadingSkeleton from './LoadingSkeleton';
+import PageTitle from './PageTitle';
 
 // Deutsche Lokalisierung aktivieren
 dayjs.locale('de');
 
 export default function OrganizerDutyList() {
-  const theme = useTheme();
   const { enqueueSnackbar } = useSnackbar();
 
   // State
@@ -82,108 +82,227 @@ export default function OrganizerDutyList() {
       );
   }, [duties, selectedSeasonId]);
 
-  // Saison-Liste für die Buttons sortieren (Neueste zuerst)
+  // Saison-Liste für die Auswahl sortieren (Neueste zuerst)
   const sortedSeasons = useMemo(() => {
     return [...seasons].sort((a, b) => b.seasonNumber - a.seasonNumber);
   }, [seasons]);
 
-  if (loading) {
-    return (
-      <LoadingSkeleton />
+  const selectedSeason = seasons.find(
+    (season) => season.id === selectedSeasonId
+  );
+  const selectedSeasonYear = useMemo(() => {
+    const earliestDutyTimestamp = filteredDuties.reduce<number | null>(
+      (earliest, duty) => {
+        const dutyDate = dayjs(duty.dutyDate);
+
+        if (!dutyDate.isValid()) return earliest;
+
+        const timestamp = dutyDate.valueOf();
+        return earliest == null || timestamp < earliest ? timestamp : earliest;
+      },
+      null
     );
+
+    return earliestDutyTimestamp == null
+      ? null
+      : dayjs(earliestDutyTimestamp).year();
+  }, [filteredDuties]);
+
+  if (loading) {
+    return <LoadingSkeleton />;
   }
 
   return (
-    <Box sx={{ maxWidth: 800, mx: 'auto', width: '100%' }}>
-      <Stack spacing={2} sx={{ mb: 3 }}>
-        <CustomTitle text="Organisieren der Treffen" />
-
-        {/* Saison Auswahl Buttons */}
-        {sortedSeasons.length > 0 ? (
-          <Stack direction="row" flexWrap="wrap" useFlexGap spacing={1}>
-            {sortedSeasons.map((s) => (
-              <Button
-                key={s.id}
-                variant={selectedSeasonId === s.id ? 'contained' : 'outlined'}
-                onClick={() => setSelectedSeasonId(s.id)}
+    <Box
+      sx={{
+        minHeight: { xs: 'calc(100vh - 176px)', md: 'calc(100vh - 128px)' },
+        mx: { xs: -1.5, sm: 0 },
+        px: { xs: 1.5, sm: 0 },
+        pb: 4,
+      }}
+    >
+      <Box sx={{ maxWidth: 1180, mx: 'auto', width: '100%' }}>
+        <Stack
+          component="header"
+          direction={{ xs: 'column', md: 'row' }}
+          justifyContent="space-between"
+          alignItems={{ xs: 'stretch', md: 'flex-end' }}
+          spacing={{ xs: 2.5, md: 4 }}
+          sx={{ mb: { xs: 2.5, md: 3 } }}
+        >
+          <Box>
+            {selectedSeason && (
+              <Typography
+                variant="overline"
+                color="text.secondary"
+                sx={{ display: 'block', mb: 0.75 }}
               >
-                Saison {s.seasonNumber}
-              </Button>
-            ))}
-          </Stack>
-        ) : (
-          <Typography color="text.secondary">
-            Keine Saisons gefunden.
-          </Typography>
-        )}
-      </Stack>
+                Saison {selectedSeason.seasonNumber}
+                {selectedSeasonYear == null ? '' : ` • ${selectedSeasonYear}`}
+              </Typography>
+            )}
+            <Box sx={{ mb: 1.75 }}>
+              <PageTitle title="Organisieren der Treffen" />
+            </Box>
+          </Box>
 
-      {/* Tabelle */}
-      <TableContainer component={Paper} elevation={1}>
-        <Table aria-label="Organisatoren Tabelle">
-          <TableHead
-            sx={{
-              background: theme.palette.primary.main,
-              color: theme.palette.primary.contrastText,
-            }}
+          {sortedSeasons.length > 0 ? (
+            <TextField
+              select
+              label="Saison"
+              value={selectedSeasonId ?? ''}
+              onChange={(event) =>
+                setSelectedSeasonId(Number(event.target.value))
+              }
+              sx={{
+                width: { xs: '100%', md: 260 },
+                flexShrink: 0,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2.5,
+                  bgcolor: (theme) =>
+                    alpha(theme.palette.background.paper, 0.94),
+                  boxShadow: (theme) =>
+                    `0 8px 24px ${alpha(theme.palette.primary.dark, 0.06)}`,
+                },
+              }}
+            >
+              {sortedSeasons.map((season) => (
+                <MenuItem key={season.id} value={season.id}>
+                  Saison {season.seasonNumber}
+                </MenuItem>
+              ))}
+            </TextField>
+          ) : (
+            <Typography color="text.secondary">
+              Keine Saisons gefunden.
+            </Typography>
+          )}
+        </Stack>
+
+        <TableContainer
+          component={Paper}
+          elevation={0}
+          sx={{
+            borderRadius: { xs: 3, sm: 3.5 },
+            border: 1,
+            borderColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+            boxShadow: (theme) =>
+              `0 16px 42px ${alpha(theme.palette.primary.dark, 0.09)}`,
+            overflow: 'hidden',
+          }}
+        >
+          <Table
+            aria-label="Organisatoren Tabelle"
+            sx={{ tableLayout: 'fixed' }}
           >
-            <TableRow>
-              <TableCell
-                sx={{
-                  fontWeight: 700,
-                  color: 'inherit',
-                  fontSize: '1.1rem',
-                }}
-                width="40%"
-              >
-                Monat
-              </TableCell>
-              <TableCell
-                sx={{
-                  fontWeight: 700,
-                  color: 'inherit',
-                  fontSize: '1.1rem',
-                }}
-              >
-                Name
-              </TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filteredDuties.map((duty) => (
-              <TableRow key={duty.id} hover>
-                <TableCell>
-                  {/* Formatierung: Dezember 2025 */}
-                  <Typography variant="body1">
-                    {dayjs(duty.dutyDate).format('MMMM YYYY')}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  {duty.isSkipped ? (
-                    <Chip label="Entfällt" size="small" />
-                  ) : (
-                    <Typography variant="body1" fontWeight={500}>
-                      {duty.userDisplayName ?? '-'}
-                    </Typography>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-
-            {filteredDuties.length === 0 && (
+            <TableHead
+              sx={{
+                background: (theme) =>
+                  `linear-gradient(110deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
+              }}
+            >
               <TableRow>
                 <TableCell
-                  colSpan={2}
-                  align="center"
-                  sx={{ py: 4, color: 'text.secondary' }}
+                  sx={{
+                    width: '40%',
+                    py: { xs: 1.5, sm: 1.75 },
+                    px: { xs: 2, sm: 3 },
+                    borderBottom: 0,
+                    color: 'primary.contrastText',
+                    fontSize: { xs: '0.95rem', sm: '1.05rem' },
+                    fontWeight: 800,
+                  }}
                 >
-                  Keine Einträge für diese Saison vorhanden.
+                  Monat
+                </TableCell>
+                <TableCell
+                  sx={{
+                    py: { xs: 1.5, sm: 1.75 },
+                    px: { xs: 2, sm: 3 },
+                    borderBottom: 0,
+                    color: 'primary.contrastText',
+                    fontSize: { xs: '0.95rem', sm: '1.05rem' },
+                    fontWeight: 800,
+                  }}
+                >
+                  Name
                 </TableCell>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+            </TableHead>
+            <TableBody>
+              {filteredDuties.map((duty) => (
+                <TableRow
+                  key={duty.id}
+                  sx={{
+                    '&:last-child .MuiTableCell-root': { borderBottom: 0 },
+                  }}
+                >
+                  <TableCell
+                    sx={{
+                      py: { xs: 1.45, sm: 1.65 },
+                      px: { xs: 2, sm: 3 },
+                      borderColor: 'divider',
+                    }}
+                  >
+                    <Typography
+                      sx={{
+                        fontSize: { xs: '0.9rem', sm: '1rem' },
+                        fontWeight: 500,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      {dayjs(duty.dutyDate).format('MMMM YYYY')}
+                    </Typography>
+                  </TableCell>
+                  <TableCell
+                    sx={{
+                      py: { xs: 1.45, sm: 1.65 },
+                      px: { xs: 2, sm: 3 },
+                      borderColor: 'divider',
+                    }}
+                  >
+                    {duty.isSkipped ? (
+                      <Chip
+                        label="Entfällt"
+                        size="small"
+                        sx={{
+                          bgcolor: 'grey.100',
+                          color: 'text.primary',
+                          fontWeight: 500,
+                        }}
+                      />
+                    ) : (
+                      <Typography
+                        sx={{
+                          color: 'text.secondary',
+                          fontSize: { xs: '0.9rem', sm: '1rem' },
+                          fontWeight: 500,
+                          lineHeight: 1.35,
+                          overflowWrap: 'anywhere',
+                        }}
+                      >
+                        {duty.userDisplayName ?? '-'}
+                      </Typography>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+
+              {filteredDuties.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={2}
+                    align="center"
+                    sx={{ py: 4, color: 'text.secondary', borderBottom: 0 }}
+                  >
+                    Keine Einträge für diese Saison vorhanden.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
     </Box>
   );
 }

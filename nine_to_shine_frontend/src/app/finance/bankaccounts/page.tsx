@@ -18,7 +18,7 @@ import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff';
 import SavingsIcon from '@mui/icons-material/Savings';
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
+import PageTitle from '@/components/PageTitle';
 import { apiFinance } from '@/definitions/commands';
 import { formatCurrency, stringAvatar, stringToColor } from '@/common/misc';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
@@ -104,7 +104,9 @@ export default function BankAccountsPage() {
     return (
       <Layout>
         <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
-          <CustomTitle text="Kontenübersicht" />
+          <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+            <PageTitle title="Kontenübersicht" />
+          </Box>
           <Alert
             severity="error"
             action={
@@ -128,9 +130,11 @@ export default function BankAccountsPage() {
   return (
     <Layout>
       <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
-        <CustomTitle text="Kontenübersicht" />
+        <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+          <PageTitle title="Kontenübersicht" />
+        </Box>
 
-        <Grid2 container spacing={4} sx={{ mt: 2 }}>
+        <Grid2 container spacing={4}>
           {accounts.map((acc) => {
             let avatarBg = stringToColor(acc.title);
             let IconComponent = null;

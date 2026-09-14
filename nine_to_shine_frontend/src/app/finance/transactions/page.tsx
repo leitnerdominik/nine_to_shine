@@ -32,7 +32,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import dayjs from 'dayjs';
 
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
+import PageTitle from '@/components/PageTitle';
 import { apiFinance, apiUsers } from '@/definitions/commands';
 import type { FinanceDto, UserDto } from '@/definitions/types';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
@@ -187,7 +187,9 @@ export default function TransactionsPage() {
   return (
     <Layout>
       <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
-        <CustomTitle text="Alle Buchungen" />
+        <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+          <PageTitle title="Alle Buchungen" />
+        </Box>
 
         {conflictError && (
           <Alert

@@ -19,7 +19,7 @@ import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
 // import PaymentsIcon from '@mui/icons-material/Payments';
 // import GavelIcon from '@mui/icons-material/Gavel';
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
+import PageTitle from '@/components/PageTitle';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 
 type Tile = {
@@ -88,7 +88,9 @@ export default function AdminCenterPage() {
   return (
     <Layout>
       <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
-        <CustomTitle text="AdminCenter" />
+        <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+          <PageTitle title="AdminCenter" />
+        </Box>
         <Alert
           severity="warning"
           variant="outlined"

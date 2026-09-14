@@ -6,7 +6,7 @@ import AddIcon from '@mui/icons-material/Add';
 import { useRouter } from 'next/navigation';
 
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
+import PageTitle from '@/components/PageTitle';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import TripCard from '@/components/TripCard';
 import { apiTrips } from '@/definitions/commands';
@@ -51,7 +51,9 @@ export default function TripHistoryPage() {
     return (
       <Layout>
         <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
-          <CustomTitle text="Urlaube" />
+          <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+            <PageTitle title="Urlaube" />
+          </Box>
           <Alert
             severity="error"
             action={
@@ -82,9 +84,11 @@ export default function TripHistoryPage() {
           minHeight: '80vh',
         }}
       >
-        <CustomTitle text="Urlaube" />
+        <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+          <PageTitle title="Urlaube" />
+        </Box>
 
-        <Stack spacing={2} sx={{ mt: 2, pb: 10 }}>
+        <Stack spacing={2} sx={{ pb: 10 }}>
           {trips.length === 0 ? (
             <Paper sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
               Keine Urlaubsreisen gefunden.

@@ -77,6 +77,7 @@ namespace NineToShineApi.Data
                 e.HasIndex(x => x.SeasonId);
                 e.HasIndex(x => x.PlayedAt);
                 e.HasIndex(x => x.GameName);
+                e.HasIndex(x => new { x.Id, x.SeasonId }).IsUnique();
             });
 
             // ranking
@@ -227,6 +228,9 @@ namespace NineToShineApi.Data
                 {
                     t.HasCheckConstraint("ck_finance_direction", "direction IN ('income','expense')");
                     t.HasCheckConstraint("ck_finance_amount_pos", "amount > 0");
+                    t.HasCheckConstraint(
+                        "ck_finance_game_requires_season",
+                        "game_id IS NULL OR season_id IS NOT NULL");
                     t.HasCheckConstraint(
                         "ck_finance_trip_link",
                         "(category = 'TRIP' AND trip_id IS NOT NULL) OR (category <> 'TRIP' AND trip_id IS NULL)");

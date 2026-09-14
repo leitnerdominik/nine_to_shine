@@ -12,7 +12,6 @@ import {
   TableRow,
   IconButton,
   Toolbar,
-  Typography,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -33,6 +32,7 @@ import { apiGame, apiSeason, apiUsers } from '@/definitions/commands';
 import type { GameDto, SeasonDto, UserDto } from '@/definitions/types';
 import dayjs from 'dayjs';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import PageTitle from '@/components/PageTitle';
 
 type GameRow = GameDto & {
   seasonNumber?: number;
@@ -127,11 +127,19 @@ export default function GamesPage() {
   return (
     <Layout>
       <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
-        <Toolbar disableGutters sx={{ mb: 2, justifyContent: 'space-between' }}>
-          <Typography variant="h5" component="h1">
-            Spiele
-          </Typography>
-          <Stack direction="row" spacing={1}>
+        <Toolbar
+          component="header"
+          disableGutters
+          sx={{
+            mb: { xs: 3, md: 4 },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'stretch', md: 'flex-start' },
+            flexDirection: { xs: 'column', md: 'row' },
+            gap: { xs: 2, md: 3 },
+          }}
+        >
+          <PageTitle title="Spiele" />
+          <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
             <IconButton
               onClick={() => void fetchGames()}
               aria-label="Aktualisieren"

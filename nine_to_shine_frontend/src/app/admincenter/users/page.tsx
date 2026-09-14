@@ -12,7 +12,6 @@ import {
   TableRow,
   IconButton,
   Toolbar,
-  Typography,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -31,6 +30,7 @@ import { useSnackbar } from 'notistack';
 import { useRouter } from 'next/navigation';
 import PeopleIcon from '@mui/icons-material/People';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import PageTitle from '@/components/PageTitle';
 
 export default function UsersPage() {
   const [rows, setRows] = useState<UserDto[]>([]);
@@ -101,11 +101,19 @@ export default function UsersPage() {
   return (
     <Layout>
       <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
-        <Toolbar disableGutters sx={{ mb: 2, justifyContent: 'space-between' }}>
-          <Typography variant="h5" component="h1">
-            Benutzer
-          </Typography>
-          <Stack direction="row" spacing={1}>
+        <Toolbar
+          component="header"
+          disableGutters
+          sx={{
+            mb: { xs: 3, md: 4 },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'stretch', md: 'flex-start' },
+            flexDirection: { xs: 'column', md: 'row' },
+            gap: { xs: 2, md: 3 },
+          }}
+        >
+          <PageTitle title="Benutzer" />
+          <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
             <IconButton
               onClick={() => void fetchUsers()}
               aria-label="Aktualisieren"

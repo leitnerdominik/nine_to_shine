@@ -10,7 +10,6 @@ import { STD_CLUB, STD_MEMBER } from '@/schema/deposit';
 export interface DepositEditData {
   defaultValues: FormInput;
   transactions: FinanceVersionReference[];
-  unmatchedDuesCount: number;
   blockingError?: string;
 }
 
@@ -78,12 +77,23 @@ export function buildDepositEditData(
     ...anonymousDues.filter((transaction) => matchedClubIds.has(transaction.id)),
     ...otherIncomes,
   ];
+  const representedDueIds = new Set(
+    representedTransactions
+      .filter((transaction) => transaction.category === 'DUES')
+      .map((transaction) => transaction.id)
+  );
+  const unrepresentedDues = incomeDues.filter(
+    (transaction) => !representedDueIds.has(transaction.id)
+  );
   const representedDates = new Set(
     representedTransactions.map((transaction) => toDateInput(transaction.occurredAt))
   );
 
-  let blockingError: string | undefined;
-  if (representedDates.size > 1) {
+  let blockingError: string | undefined =
+    unrepresentedDues.length > 0
+      ? 'Einige Beiträge konnten keinem Mitglied eindeutig zugeordnet werden und müssen vor der Bearbeitung korrigiert werden.'
+      : undefined;
+  if (!blockingError && representedDates.size > 1) {
     blockingError =
       'Die vorhandenen Einzahlungen haben unterschiedliche Buchungsdaten und können nicht gemeinsam bearbeitet werden.';
   }
@@ -148,7 +158,6 @@ export function buildDepositEditData(
       id,
       updatedAt,
     })),
-    unmatchedDuesCount: anonymousDues.length - matchedClubIds.size,
     blockingError,
   };
 }

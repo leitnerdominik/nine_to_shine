@@ -99,7 +99,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             OccurredAt = financeOccurredAt,
             User = user is { Id: 0 } ? user : null,
             UserId = user is { Id: > 0 } ? user.Id : null,
-            SeasonId = seasonId,
+            SeasonId = seasonId ?? game?.SeasonId,
             Game = game is { Id: 0 } ? game : null,
             GameId = game is { Id: > 0 } ? game.Id : null,
             Trip = category == "TRIP" && trip is not { Id: > 0 }

@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import NextLink from 'next/link';
 import dayjs from 'dayjs';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Box,
+  Link,
   MenuItem,
   Paper,
   Stack,
@@ -15,14 +17,16 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
-  useTheme,
 } from '@mui/material';
+import { alpha, type Theme } from '@mui/material/styles';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useSnackbar } from 'notistack';
 
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import PageTitle from '@/components/PageTitle';
 import {
   apiGame,
   apiRanking,
@@ -35,6 +39,7 @@ import type {
   SeasonDto,
   UserDto,
 } from '@/definitions/types';
+import { getPlayerInitials } from './rankingOverview';
 
 type OverviewRow = {
   gameId: number;
@@ -43,8 +48,19 @@ type OverviewRow = {
   pointsByUserId: Map<number, number>;
 };
 
+const visuallyHidden = {
+  position: 'absolute',
+  width: 1,
+  height: 1,
+  p: 0,
+  m: -1,
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+} as const;
+
 export default function RankingsOverviewPage() {
-  const theme = useTheme();
   const { enqueueSnackbar } = useSnackbar();
   const router = useRouter();
   const pathname = usePathname();
@@ -69,9 +85,9 @@ export default function RankingsOverviewPage() {
       setUsers(userData);
       setGames(gameData);
       setRankings(rankingData);
-    } catch (e) {
+    } catch (error) {
       enqueueSnackbar(
-        (e as Error)?.message ?? 'Daten konnten nicht geladen werden.',
+        (error as Error)?.message ?? 'Daten konnten nicht geladen werden.',
         { variant: 'error' }
       );
     } finally {
@@ -159,130 +175,397 @@ export default function RankingsOverviewPage() {
     return totals;
   }, [rows]);
 
+  const seasonYear = rows[0] == null ? undefined : dayjs(rows[0].playedAt).year();
+  const tableMinWidth = Math.max(520, 248 + activeUsers.length * 76);
+
   return (
     <Layout>
-      {loading ? (
-        <LoadingSkeleton />
-      ) : (
-        <>
-          <Stack
-            direction={{ xs: 'column', md: 'row' }}
-            justifyContent="space-between"
-            alignItems={{ xs: 'flex-start', md: 'center' }}
-            spacing={2}
-            sx={{ mb: 4 }}
-          >
-            <Box>
-              <CustomTitle text="Übersichtstabelle" />
-              <Typography variant="h6" color="text.secondary">
-                Alle Spiele mit Punkten pro Spieler
-              </Typography>
-            </Box>
-          </Stack>
-
-          <Stack
-            direction={{ xs: 'column', md: 'row' }}
-            spacing={2}
-            sx={{ mb: 4 }}
-          >
-            <TextField
-              select
-              label="Saison"
-              value={selectedSeasonNumber ?? ''}
-              onChange={(event) =>
-                updateSearchParam('season', String(event.target.value))
-              }
-              sx={{ minWidth: { xs: '100%', md: 200 } }}
+      <Box
+        sx={{
+          minHeight: { xs: 'calc(100vh - 176px)', md: 'calc(100vh - 128px)' },
+          mx: { xs: -1.5, sm: 0 },
+          px: { xs: 1.5, sm: 0 },
+          pb: 4,
+        }}
+      >
+        {loading ? (
+          <LoadingSkeleton />
+        ) : (
+          <Box sx={{ width: '100%', maxWidth: 1180, mx: 'auto' }}>
+            <Stack
+              component="header"
+              direction={{ xs: 'column', md: 'row' }}
+              justifyContent="space-between"
+              alignItems={{ xs: 'stretch', md: 'flex-end' }}
+              spacing={{ xs: 2.5, md: 4 }}
+              sx={{ mb: { xs: 2.5, md: 3 } }}
             >
-              {seasonNumbers.map((seasonNumber) => (
-                <MenuItem key={seasonNumber} value={seasonNumber}>
-                  Saison {seasonNumber}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Stack>
+              <Box>
+                <Typography
+                  variant="overline"
+                  color="text.secondary"
+                  sx={{ display: 'block', mb: 0.5 }}
+                >
+                  Saison {selectedSeasonNumber ?? '–'}
+                  {seasonYear == null ? '' : ` • ${seasonYear}`}
+                </Typography>
+                <PageTitle
+                  title="Übersichtstabelle"
+                  subtitle="Alle Spiele mit Punkten pro Spieler"
+                />
+              </Box>
 
-          <TableContainer
-            component={Paper}
-            sx={{
-              borderRadius: 4,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-              overflow: 'auto',
-            }}
-          >
-            <Table aria-label="Übersichtstabelle aller Spiele">
-              <TableHead
+              <TextField
+                select
+                label="Saison"
+                value={selectedSeasonNumber ?? ''}
+                onChange={(event) =>
+                  updateSearchParam('season', String(event.target.value))
+                }
                 sx={{
-                  background: `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.primary.light} 90%)`,
+                  width: { xs: '100%', md: 228 },
+                  flexShrink: 0,
+                  '& .MuiOutlinedInput-root': {
+                    borderRadius: 2.5,
+                    bgcolor: (theme) =>
+                      alpha(theme.palette.background.paper, 0.92),
+                  },
                 }}
               >
-                <TableRow>
-                  <TableCell sx={{ color: 'inherit', fontWeight: 700 }}>
-                    Spiel
-                  </TableCell>
-                  <TableCell sx={{ color: 'inherit', fontWeight: 700 }}>
-                    Datum
-                  </TableCell>
-                  {activeUsers.map((user) => (
-                    <TableCell
-                      key={user.id}
-                      align="center"
-                      sx={{ color: 'inherit', fontWeight: 700 }}
-                    >
-                      {user.displayName}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow
-                    key={row.gameId}
-                    hover
-                    sx={{ cursor: 'pointer' }}
-                    onClick={() => router.push(`/rankings/${row.gameId}`)}
-                  >
-                    <TableCell>{row.gameName}</TableCell>
-                    <TableCell>{dayjs(row.playedAt).format('DD.MM.YYYY')}</TableCell>
+                {seasonNumbers.map((seasonNumber) => (
+                  <MenuItem key={seasonNumber} value={seasonNumber}>
+                    Saison {seasonNumber}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Stack>
+
+            <TableContainer
+              component={Paper}
+              aria-label="Horizontal scrollbare Übersichtstabelle"
+              sx={{
+                p: { xs: 0.75, sm: 1.25 },
+                borderRadius: { xs: 3, sm: 4 },
+                bgcolor: (theme) => alpha(theme.palette.background.paper, 0.76),
+                border: 1,
+                borderColor: (theme) => alpha(theme.palette.primary.main, 0.06),
+                boxShadow: (theme) =>
+                  `0 14px 40px ${alpha(theme.palette.primary.dark, 0.08)}`,
+                overflowX: 'auto',
+                WebkitOverflowScrolling: 'touch',
+              }}
+            >
+              <Table
+                aria-label="Übersichtstabelle aller Spiele"
+                sx={{
+                  minWidth: { xs: tableMinWidth, md: '100%' },
+                  borderCollapse: 'separate',
+                  borderSpacing: '0 9px',
+                }}
+              >
+                <TableHead sx={visuallyHidden}>
+                  <TableRow>
+                    <TableCell>Spiel und Datum</TableCell>
                     {activeUsers.map((user) => (
                       <TableCell key={user.id} align="center">
-                        {row.pointsByUserId.get(user.id) ?? '-'}
+                        {user.displayName}
                       </TableCell>
                     ))}
+                    <TableCell>Aktion</TableCell>
                   </TableRow>
-                ))}
+                </TableHead>
+                <TableBody>
+                  {rows.map((row) => {
+                    const isPlanned = dayjs(row.playedAt).isAfter(dayjs(), 'day');
+                    const rowBackground = (theme: Theme) =>
+                      isPlanned
+                        ? `linear-gradient(100deg, ${alpha(
+                            theme.palette.primary.main,
+                            0.1
+                          )}, ${alpha(theme.palette.primary.light, 0.06)})`
+                        : theme.palette.background.paper;
 
-                {rows.length > 0 && (
-                  <TableRow sx={{ backgroundColor: theme.palette.action.selected }}>
-                    <TableCell colSpan={2} sx={{ fontWeight: 700 }}>
-                      Gesamt
-                    </TableCell>
-                    {activeUsers.map((user) => (
-                      <TableCell
-                        key={user.id}
-                        align="center"
-                        sx={{ fontWeight: 700 }}
+                    return (
+                      <TableRow
+                        key={row.gameId}
+                        onClick={(event) => {
+                          if (!(event.target as HTMLElement).closest?.('a')) {
+                            router.push(`/rankings/${row.gameId}`);
+                          }
+                        }}
+                        sx={{
+                          cursor: 'pointer',
+                          '& > .MuiTableCell-root': {
+                            py: { xs: 1.25, sm: 1.4 },
+                            px: { xs: 1, sm: 1.25 },
+                            borderTop: 1,
+                            borderBottom: 1,
+                            borderColor: (theme) =>
+                              alpha(theme.palette.primary.main, 0.07),
+                            background: rowBackground,
+                            transition: 'box-shadow 160ms ease',
+                          },
+                          '& > .MuiTableCell-root:first-of-type': {
+                            borderLeft: 1,
+                            borderRadius: '16px 0 0 16px',
+                          },
+                          '& > .MuiTableCell-root:last-of-type': {
+                            borderRight: 1,
+                            borderRadius: '0 16px 16px 0',
+                          },
+                          '&:hover > .MuiTableCell-root': {
+                            boxShadow: (theme) =>
+                              `0 8px 24px ${alpha(
+                                theme.palette.primary.dark,
+                                0.08
+                              )}`,
+                          },
+                        }}
                       >
-                        {totalsByUserId.get(user.id) ?? 0}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                )}
+                        <TableCell
+                          sx={{
+                            position: { xs: 'sticky', md: 'static' },
+                            left: 0,
+                            zIndex: { xs: 2, md: 'auto' },
+                            width: { xs: 154, md: 260 },
+                            minWidth: { xs: 154, md: 260 },
+                            boxShadow: {
+                              xs: '5px 0 10px rgba(7, 17, 47, 0.03)',
+                              md: 'none',
+                            },
+                          }}
+                        >
+                          <Link
+                            component={NextLink}
+                            href={`/rankings/${row.gameId}`}
+                            aria-label={`Spiel ${row.gameName} öffnen`}
+                            underline="none"
+                            sx={{
+                              display: 'inline-block',
+                              color: 'text.primary',
+                              fontWeight: 800,
+                              lineHeight: 1.2,
+                              overflowWrap: 'anywhere',
+                              '&:focus-visible': {
+                                outline: '3px solid',
+                                outlineColor: 'primary.main',
+                                outlineOffset: 3,
+                                borderRadius: 1,
+                              },
+                            }}
+                          >
+                            {row.gameName}
+                            {isPlanned && (
+                              <Typography
+                                component="span"
+                                sx={{ display: 'block', font: 'inherit' }}
+                              >
+                                (geplant)
+                              </Typography>
+                            )}
+                          </Link>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ mt: 0.6, whiteSpace: 'nowrap' }}
+                          >
+                            {dayjs(row.playedAt).format('DD.MM.YYYY')}
+                          </Typography>
+                        </TableCell>
 
-                {rows.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={Math.max(activeUsers.length + 2, 3)}>
-                      <Typography sx={{ py: 2 }}>
-                        Für diese Auswahl sind keine Spiele vorhanden.
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </>
-      )}
+                        {activeUsers.map((user) => (
+                          <TableCell
+                            key={user.id}
+                            align="center"
+                            sx={{ width: 76, minWidth: 76 }}
+                          >
+                            <Stack alignItems="center" spacing={0.65}>
+                              <Tooltip title={user.displayName} arrow>
+                                <Box
+                                  component="span"
+                                  aria-label={`Spieler ${user.displayName}`}
+                                  sx={{
+                                    display: 'grid',
+                                    placeItems: 'center',
+                                    width: { xs: 38, sm: 42 },
+                                    height: { xs: 38, sm: 42 },
+                                    borderRadius: '50%',
+                                    bgcolor: (theme) =>
+                                      alpha(theme.palette.primary.main, 0.055),
+                                    border: 1,
+                                    borderColor: (theme) =>
+                                      alpha(theme.palette.primary.main, 0.08),
+                                    color: 'text.primary',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 600,
+                                  }}
+                                >
+                                  {getPlayerInitials(user.displayName)}
+                                </Box>
+                              </Tooltip>
+                              <Typography
+                                component="span"
+                                sx={{
+                                  minHeight: '1.25rem',
+                                  color: 'text.primary',
+                                  fontSize: '0.9rem',
+                                  fontWeight: 800,
+                                  lineHeight: 1.25,
+                                }}
+                              >
+                                {row.pointsByUserId.get(user.id) ?? '–'}
+                              </Typography>
+                            </Stack>
+                          </TableCell>
+                        ))}
+
+                        <TableCell
+                          align="center"
+                          sx={{
+                            position: { xs: 'sticky', md: 'static' },
+                            right: 0,
+                            zIndex: { xs: 2, md: 'auto' },
+                            width: 48,
+                            minWidth: 48,
+                            boxShadow: {
+                              xs: '-5px 0 10px rgba(7, 17, 47, 0.03)',
+                              md: 'none',
+                            },
+                          }}
+                        >
+                          <Link
+                            component={NextLink}
+                            href={`/rankings/${row.gameId}`}
+                            aria-label={`Spiel ${row.gameName} öffnen`}
+                            sx={{
+                              display: 'inline-flex',
+                              color: 'primary.main',
+                              borderRadius: '50%',
+                              '&:focus-visible': {
+                                outline: '3px solid',
+                                outlineColor: 'primary.main',
+                                outlineOffset: 2,
+                              },
+                            }}
+                          >
+                            <ChevronRightIcon aria-hidden="true" />
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+
+                  {rows.length > 0 && (
+                    <TableRow
+                      sx={{
+                        '& > .MuiTableCell-root': {
+                          py: { xs: 1.25, sm: 1.4 },
+                          px: { xs: 1, sm: 1.25 },
+                          borderTop: 1,
+                          borderBottom: 1,
+                          borderColor: (theme) =>
+                            alpha(theme.palette.primary.main, 0.08),
+                          background: (theme) =>
+                            `linear-gradient(100deg, ${alpha(
+                              theme.palette.primary.main,
+                              0.11
+                            )}, ${alpha(theme.palette.primary.light, 0.07)})`,
+                        },
+                        '& > .MuiTableCell-root:first-of-type': {
+                          borderLeft: 1,
+                          borderRadius: '16px 0 0 16px',
+                        },
+                        '& > .MuiTableCell-root:last-of-type': {
+                          borderRight: 1,
+                          borderRadius: '0 16px 16px 0',
+                        },
+                      }}
+                    >
+                      <TableCell
+                        sx={{
+                          position: { xs: 'sticky', md: 'static' },
+                          left: 0,
+                          zIndex: { xs: 2, md: 'auto' },
+                          fontWeight: 800,
+                          width: { xs: 154, md: 260 },
+                          minWidth: { xs: 154, md: 260 },
+                        }}
+                      >
+                        Gesamt
+                      </TableCell>
+                      {activeUsers.map((user) => (
+                        <TableCell
+                          key={user.id}
+                          align="center"
+                          sx={{ width: 76, minWidth: 76 }}
+                        >
+                          <Stack alignItems="center" spacing={0.65}>
+                            <Tooltip title={user.displayName} arrow>
+                              <Box
+                                component="span"
+                                aria-label={`Spieler ${user.displayName}`}
+                                sx={{
+                                  display: 'grid',
+                                  placeItems: 'center',
+                                  width: { xs: 38, sm: 42 },
+                                  height: { xs: 38, sm: 42 },
+                                  borderRadius: '50%',
+                                  bgcolor: (theme) =>
+                                    alpha(theme.palette.background.paper, 0.55),
+                                  border: 1,
+                                  borderColor: (theme) =>
+                                    alpha(theme.palette.primary.main, 0.1),
+                                  color: 'text.primary',
+                                  fontSize: '0.8rem',
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {getPlayerInitials(user.displayName)}
+                              </Box>
+                            </Tooltip>
+                            <Typography
+                              component="span"
+                              sx={{ fontSize: '0.9rem', fontWeight: 800 }}
+                            >
+                              {totalsByUserId.get(user.id) ?? 0}
+                            </Typography>
+                          </Stack>
+                        </TableCell>
+                      ))}
+                      <TableCell
+                        aria-hidden="true"
+                        sx={{
+                          position: { xs: 'sticky', md: 'static' },
+                          right: 0,
+                          zIndex: { xs: 2, md: 'auto' },
+                          width: 48,
+                          minWidth: 48,
+                        }}
+                      />
+                    </TableRow>
+                  )}
+
+                  {rows.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={Math.max(activeUsers.length + 2, 2)}
+                        sx={{ borderBottom: 0 }}
+                      >
+                        <Typography
+                          color="text.secondary"
+                          sx={{ py: 5, textAlign: 'center' }}
+                        >
+                          Für diese Auswahl sind keine Spiele vorhanden.
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
+      </Box>
     </Layout>
   );
 }

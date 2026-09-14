@@ -25,7 +25,7 @@ import dayjs from 'dayjs';
 import { useSnackbar } from 'notistack';
 
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
+import PageTitle from '@/components/PageTitle';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 import { routes } from '@/common/routes';
 import { apiFinance, apiSeason } from '@/definitions/commands';
@@ -117,15 +117,14 @@ export default function DuesOverviewPage() {
     <Layout>
       <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
         <Stack
-          direction={{ xs: 'column', sm: 'row' }}
+          component="header"
+          direction={{ xs: 'column', md: 'row' }}
           justifyContent="space-between"
-          alignItems={{ xs: 'stretch', sm: 'center' }}
+          alignItems={{ xs: 'stretch', md: 'flex-end' }}
           spacing={2}
           mb={3}
         >
-          <Box>
-            <CustomTitle text="Offene Spielbeiträge" />
-          </Box>
+          <PageTitle title="Offene Spielbeiträge" />
 
           {seasons.length > 0 && (
             <TextField

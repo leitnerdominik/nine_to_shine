@@ -19,6 +19,110 @@ public sealed class FinanceControllerTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task Game_linked_finance_rejects_mismatched_seasons_atomically()
+    {
+        var user = TestUser();
+        var gameSeason = TestSeason(1);
+        var otherSeason = TestSeason(2);
+        var game = TestGame(gameSeason, user);
+        await SeedAsync(user, gameSeason, otherSeason, game);
+
+        async Task AssertMismatch(HttpResponseMessage response)
+        {
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            var body = await response.Content.ReadAsStringAsync();
+            body.Should().Contain("season_id must match game_id's season.");
+        }
+
+        await AssertMismatch(await Client.PostAsJsonAsync("/api/finance", new
+        {
+            direction = "expense", amount = 10m, category = "EVENT",
+            seasonId = otherSeason.Id, gameId = game.Id
+        }));
+
+        await AssertMismatch(await Client.PostAsJsonAsync("/api/finance/deposits/batch", new
+        {
+            occurredAt = DateTime.UtcNow, seasonId = otherSeason.Id, gameId = game.Id,
+            members = new[] { new { userId = user.Id, memberAmount = 10m, clubAmount = 0m } },
+            otherIncomes = Array.Empty<object>()
+        }));
+
+        await AssertMismatch(await Client.PostAsJsonAsync("/api/finance/expenses/batch", new
+        {
+            occurredAt = DateTime.UtcNow, seasonId = otherSeason.Id, gameId = game.Id,
+            items = new[] { new { amount = 10m, description = "bad season" } }
+        }));
+
+        var valid = await Client.PostAsJsonAsync("/api/finance", new
+        {
+            direction = "expense", amount = 11m, category = "EVENT", gameId = game.Id
+        });
+        valid.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await valid.Content.ReadFromJsonAsync<FinanceDto>();
+        created!.SeasonId.Should().Be(gameSeason.Id);
+
+        await AssertMismatch(await Client.PutAsJsonAsync($"/api/finance/{created.Id}", new
+        {
+            updatedAt = created.UpdatedAt, direction = "expense", amount = 12m,
+            category = "EVENT", seasonId = otherSeason.Id, gameId = game.Id
+        }));
+
+        var derivedUpdate = await Client.PutAsJsonAsync($"/api/finance/{created.Id}", new
+        {
+            updatedAt = created.UpdatedAt, direction = "expense", amount = 13m,
+            category = "EVENT", gameId = game.Id
+        });
+        derivedUpdate.StatusCode.Should().Be(HttpStatusCode.OK);
+        var updated = await derivedUpdate.Content.ReadFromJsonAsync<FinanceDto>();
+        updated!.SeasonId.Should().Be(gameSeason.Id);
+
+        var rows = await WithDbContextAsync(db => db.Finance.AsNoTracking().ToListAsync());
+        rows.Should().ContainSingle(row => row.Id == created.Id && row.SeasonId == gameSeason.Id && row.Amount == 13m);
+    }
+
+    [Fact]
+    public async Task Game_linked_create_waits_for_a_concurrent_season_move_and_uses_the_new_season()
+    {
+        var user = TestUser();
+        var originalSeason = TestSeason(1);
+        var replacementSeason = TestSeason(2);
+        var game = TestGame(originalSeason, user);
+        await SeedAsync(user, originalSeason, replacementSeason, game);
+
+        var connectionString = await WithDbContextAsync(db =>
+            Task.FromResult(db.Database.GetConnectionString()));
+        await using var connection = new NpgsqlConnection(connectionString!);
+        await connection.OpenAsync();
+        await using var moveTransaction = await connection.BeginTransactionAsync();
+        await using (var moveCommand = new NpgsqlCommand(
+            "UPDATE game SET season_id = @seasonId WHERE id = @gameId",
+            connection,
+            moveTransaction))
+        {
+            moveCommand.Parameters.AddWithValue("seasonId", replacementSeason.Id);
+            moveCommand.Parameters.AddWithValue("gameId", game.Id);
+            await moveCommand.ExecuteNonQueryAsync();
+        }
+
+        var createTask = Client.PostAsJsonAsync("/api/finance", new
+        {
+            direction = "expense",
+            amount = 10m,
+            category = "EVENT",
+            gameId = game.Id
+        });
+
+        await Task.Delay(100);
+        createTask.IsCompleted.Should().BeFalse();
+        await moveTransaction.CommitAsync();
+
+        var response = await createTask.WaitAsync(TimeSpan.FromSeconds(5));
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = await response.Content.ReadFromJsonAsync<FinanceDto>();
+        created!.SeasonId.Should().Be(replacementSeason.Id);
+    }
+
+    [Fact]
     public async Task Create_validates_references_and_normalizes_category()
     {
         var user = TestUser();
@@ -260,6 +364,55 @@ public sealed class FinanceControllerTests : IntegrationTestBase
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var rows = await WithDbContextAsync(db => db.Finance.AsNoTracking().ToListAsync());
         rows.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Finance_writes_reject_sub_cent_amounts_without_changing_persisted_rows()
+    {
+        var season = TestSeason();
+        await SeedAsync(season);
+        var existing = TestFinance("income", 25m, "DUES", seasonId: season.Id);
+        await SeedAsync(existing);
+
+        var createResponse = await Client.PostAsJsonAsync("/api/finance", new
+        {
+            direction = "expense",
+            amount = 1.005m,
+            category = "OTHER",
+            seasonId = season.Id
+        });
+        createResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await createResponse.Content.ReadAsStringAsync())
+            .Should().Contain("greater than 0 and have at most two decimal places");
+
+        var updateResponse = await Client.PutAsJsonAsync($"/api/finance/{existing.Id}", new
+        {
+            updatedAt = existing.UpdatedAt,
+            direction = "income",
+            amount = 1.005m,
+            category = "DUES",
+            seasonId = season.Id
+        });
+        updateResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var expenseBatchResponse = await Client.PostAsJsonAsync("/api/finance/expenses/batch", new
+        {
+            occurredAt = DateTime.UtcNow,
+            seasonId = season.Id,
+            items = new[]
+            {
+                new { amount = 12.50m, description = "Valid" },
+                new { amount = 1.005m, description = "Sub-cent" }
+            }
+        });
+        expenseBatchResponse.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .ToListAsync());
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(existing.Id);
+        rows[0].Amount.Should().Be(25m);
     }
 
     [Fact]
@@ -608,7 +761,8 @@ public sealed class FinanceControllerTests : IntegrationTestBase
                 {
                     Version(memberDues),
                     Version(clubDues),
-                    Version(oldOtherIncome)
+                    Version(oldOtherIncome),
+                    Version(concurrentOtherIncome)
                 },
                 occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
                 members = new[]
@@ -637,12 +791,12 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             .OrderBy(finance => finance.Id)
             .ToListAsync());
 
-        rows.Should().HaveCount(6);
+        rows.Should().HaveCount(5);
         rows.Should().NotContain(finance =>
             finance.Id == memberDues.Id ||
             finance.Id == clubDues.Id ||
             finance.Id == oldOtherIncome.Id);
-        rows.Should().Contain(finance => finance.Id == concurrentOtherIncome.Id);
+        rows.Should().NotContain(finance => finance.Id == concurrentOtherIncome.Id);
         rows.Should().Contain(finance => finance.Id == unrelatedIncome.Id);
         rows.Should().Contain(finance => finance.Id == expense.Id);
         rows.Should().Contain(finance =>
@@ -659,6 +813,53 @@ public sealed class FinanceControllerTests : IntegrationTestBase
             finance.Category == "OTHER" &&
             finance.Amount == 7m &&
             finance.Description == "Restgeld");
+    }
+
+    [Fact]
+    public async Task Replace_game_deposits_conflicts_when_a_managed_row_is_added_after_editor_read()
+    {
+        var nina = TestUser();
+        var season = TestSeason();
+        var game = TestGame(season, nina);
+        await SeedAsync(nina, season, game);
+
+        var originalDues = TestFinance("income", 30m, "DUES", user: nina, game: game);
+        await SeedAsync(originalDues);
+
+        var originalReference = Version(originalDues);
+        var addedDues = TestFinance("income", 20m, "DUES", user: nina, game: game);
+        await SeedAsync(addedDues);
+
+        var response = await Client.PutAsJsonAsync(
+            $"/api/finance/game/{game.Id}/deposits/replace",
+            new
+            {
+                transactions = new[] { originalReference },
+                occurredAt = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc),
+                members = new[]
+                {
+                    new
+                    {
+                        userId = nina.Id,
+                        memberAmount = 60m,
+                        clubAmount = 0m,
+                        description = "Stale edit"
+                    }
+                },
+                otherIncomes = Array.Empty<object>()
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+
+        var rows = await WithDbContextAsync(db => db.Finance
+            .AsNoTracking()
+            .OrderBy(finance => finance.Id)
+            .ToListAsync());
+        rows.Should().HaveCount(2);
+        rows.Should().Contain(finance =>
+            finance.Id == originalDues.Id && finance.Amount == 30m);
+        rows.Should().Contain(finance =>
+            finance.Id == addedDues.Id && finance.Amount == 20m);
     }
 
     [Fact]

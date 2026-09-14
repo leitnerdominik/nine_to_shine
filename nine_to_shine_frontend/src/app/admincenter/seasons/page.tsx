@@ -29,8 +29,8 @@ import Layout from '@/components/Layout';
 import { useSnackbar } from 'notistack';
 import { useRouter } from 'next/navigation';
 import PeopleIcon from '@mui/icons-material/People';
-import CustomTitle from '@/components/CustomTitle';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import PageTitle from '@/components/PageTitle';
 
 export default function SeasonsPage() {
   const [rows, setRows] = useState<SeasonDto[]>([]);
@@ -96,9 +96,19 @@ export default function SeasonsPage() {
   return (
     <Layout>
       <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
-        <Toolbar disableGutters sx={{ mb: 2, justifyContent: 'space-between' }}>
-          <CustomTitle text="Saisonen" />
-          <Stack direction="row" spacing={1}>
+        <Toolbar
+          component="header"
+          disableGutters
+          sx={{
+            mb: { xs: 3, md: 4 },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'stretch', md: 'flex-start' },
+            flexDirection: { xs: 'column', md: 'row' },
+            gap: { xs: 2, md: 3 },
+          }}
+        >
+          <PageTitle title="Saisonen" />
+          <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
             <IconButton
               onClick={() => void fetchSeasons()}
               aria-label="Aktualisieren"

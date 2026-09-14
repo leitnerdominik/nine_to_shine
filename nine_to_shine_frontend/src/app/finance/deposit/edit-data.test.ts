@@ -63,10 +63,6 @@ describe('buildDepositEditData', () => {
         category: 'OTHER',
         description: 'Restgeld',
       }),
-      finance(5, {
-        amount: 20,
-        description: 'Alter Vereinsbeitrag',
-      }),
       finance(6, { direction: 'expense', category: 'PIZZA', amount: 10 }),
       finance(7, { category: 'PRIZE', amount: 3 }),
     ]);
@@ -78,7 +74,6 @@ describe('buildDepositEditData', () => {
       { id: 3, updatedAt: '2026-07-01T00:00:00.000003Z' },
       { id: 4, updatedAt: '2026-07-01T00:00:00.000004Z' },
     ]);
-    expect(result.unmatchedDuesCount).toBe(1);
     expect(result.defaultValues.globalDate).toBe('2026-07-01');
     expect(result.defaultValues.seasonId).toBe(3);
     expect(result.defaultValues.gameId).toBe(7);
@@ -97,6 +92,34 @@ describe('buildDepositEditData', () => {
     });
     expect(result.defaultValues.otherIncomes).toEqual([
       { amount: '5', description: 'Restgeld' },
+    ]);
+  });
+
+  it('blocks editing and excludes an unmatched anonymous due', () => {
+    const result = buildDepositEditData(users, game, [
+      finance(1, { userId: 1, amount: 30 }),
+      finance(2, { amount: 20, description: 'Alter Vereinsbeitrag' }),
+    ]);
+
+    expect(result.blockingError).toContain(
+      'keinem Mitglied eindeutig zugeordnet'
+    );
+    expect(result.transactions).toEqual([
+      { id: 1, updatedAt: '2026-07-01T00:00:00.000001Z' },
+    ]);
+  });
+
+  it('blocks editing and excludes a due for an unknown user', () => {
+    const result = buildDepositEditData(users, game, [
+      finance(1, { userId: 1, amount: 30 }),
+      finance(2, { userId: 999, amount: 20 }),
+    ]);
+
+    expect(result.blockingError).toContain(
+      'keinem Mitglied eindeutig zugeordnet'
+    );
+    expect(result.transactions).toEqual([
+      { id: 1, updatedAt: '2026-07-01T00:00:00.000001Z' },
     ]);
   });
 
