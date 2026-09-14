@@ -118,15 +118,6 @@ export default function OrganizerDutyList() {
         mx: { xs: -1.5, sm: 0 },
         px: { xs: 1.5, sm: 0 },
         pb: 4,
-        borderRadius: { sm: 5 },
-        background: (theme) =>
-          `radial-gradient(circle at 100% 0%, ${alpha(
-            theme.palette.primary.main,
-            0.08
-          )}, transparent 34%), linear-gradient(180deg, ${alpha(
-            theme.palette.primary.light,
-            0.035
-          )}, transparent 58%)`,
       }}
     >
       <Box sx={{ maxWidth: 1180, mx: 'auto', width: '100%' }}>
@@ -150,11 +141,10 @@ export default function OrganizerDutyList() {
               </Typography>
             )}
             <Typography
-              variant="h1"
               component="h1"
               sx={{
                 color: 'text.primary',
-                fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' },
+                fontSize: { xs: '2.5rem', sm: '3.25rem' },
                 fontWeight: 800,
                 letterSpacing: '-0.04em',
                 lineHeight: 1.05,
@@ -162,6 +152,17 @@ export default function OrganizerDutyList() {
             >
               Organisieren der Treffen
             </Typography>
+            <Box
+              aria-hidden="true"
+              sx={{
+                width: 40,
+                height: 6,
+                mt: 1.25,
+                mb: 1.75,
+                borderRadius: 999,
+                bgcolor: 'primary.main',
+              }}
+            />
           </Box>
 
           {sortedSeasons.length > 0 ? (
