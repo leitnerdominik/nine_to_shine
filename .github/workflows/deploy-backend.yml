@@ -1,0 +1,104 @@
+name: Deploy backend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "nine_to_shine_backend/**"
+      - "deploy/backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ninetoshine-backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Test and deploy backend
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+
+    env:
+      VPS_APP_DIR: /var/www/ninetoshine
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_PORT: "22"
+      VPS_USER: ${{ secrets.VPS_USER }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore backend
+        working-directory: nine_to_shine_backend
+        run: dotnet restore NineToShineApi.sln
+
+      - name: Test backend
+        working-directory: nine_to_shine_backend
+        run: dotnet test NineToShineApi.sln --configuration Release --no-restore
+
+      - name: Publish backend
+        working-directory: nine_to_shine_backend
+        run: >-
+          dotnet publish NineToShineApi.csproj
+          --configuration Release
+          --no-restore
+          --output "${{ runner.temp }}/ninetoshine-backend"
+
+      - name: Test release activation
+        run: bash deploy/backend/activate-release.test.sh
+
+      - name: Prepare SSH
+        env:
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+        run: |
+          test -n "$VPS_HOST"
+          test -n "$VPS_USER"
+          test -n "$VPS_SSH_KNOWN_HOSTS"
+          test -n "$VPS_SSH_PRIVATE_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > ~/.ssh/ninetoshine_deploy
+          chmod 600 ~/.ssh/ninetoshine_deploy
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Create release directory
+        env:
+          RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          ssh -i ~/.ssh/ninetoshine_deploy -p "$VPS_PORT" \
+            "$VPS_USER@$VPS_HOST" \
+            "install -d -m 0755 '$VPS_APP_DIR/releases/$RELEASE_ID'"
+
+      - name: Upload release
+        env:
+          RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          rsync -az --delete --chmod=D755,F644 \
+            -e "ssh -i ~/.ssh/ninetoshine_deploy -p $VPS_PORT" \
+            "${{ runner.temp }}/ninetoshine-backend/" \
+            "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/releases/$RELEASE_ID/"
+
+      - name: Activate and verify release
+        env:
+          RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          ssh -i ~/.ssh/ninetoshine_deploy -p "$VPS_PORT" \
+            "$VPS_USER@$VPS_HOST" \
+            "bash -s -- '$RELEASE_ID'" \
+            < deploy/backend/activate-release.sh
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/ninetoshine_deploy
