@@ -91,7 +91,6 @@ export default function FinancePage() {
         <Box sx={{ mb: { xs: 2, sm: 3 } }}>
           <PageTitle
             title="Finanzen"
-            subtitle="Behalte deine Finanzen im Überblick."
           />
         </Box>
 

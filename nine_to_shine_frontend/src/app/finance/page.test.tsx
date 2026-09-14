@@ -26,9 +26,6 @@ describe('FinancePage', () => {
     expect(
       screen.getByRole('heading', { level: 1, name: 'Finanzen' })
     ).toBeInTheDocument();
-    expect(
-      screen.getByText('Behalte deine Finanzen im Überblick.')
-    ).toBeInTheDocument();
 
     const links = screen.getAllByRole('link');
     expect(links).toHaveLength(expectedTiles.length);
