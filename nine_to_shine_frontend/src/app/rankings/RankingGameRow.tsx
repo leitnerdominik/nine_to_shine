@@ -11,6 +11,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import { getGameEmoji } from './gameEmoji';
 
 type RankingGameRowProps = {
   gameId: number;
@@ -19,45 +20,6 @@ type RankingGameRowProps = {
   participantCount: number;
   winnerName: string;
 };
-
-const GAME_EMOJI_RULES: ReadonlyArray<{
-  keywords: readonly string[];
-  emoji: string;
-}> = [
-  { keywords: ['bowling', 'kegeln'], emoji: '🎳' },
-  { keywords: ['pubquiz', 'pub quiz', 'quiz'], emoji: '💡' },
-  {
-    keywords: [
-      'tischtennis',
-      'tisch tennis',
-      'table tennis',
-      'ping pong',
-      'pingpong',
-    ],
-    emoji: '🏓',
-  },
-  { keywords: ['schach', 'chess'], emoji: '♟️' },
-  { keywords: ['darts', 'dart'], emoji: '🎯' },
-  {
-    keywords: [
-      'kicker',
-      'tischfußball',
-      'tischfussball',
-      'table football',
-      'foosball',
-    ],
-    emoji: '⚽',
-  },
-];
-
-export function getGameEmoji(gameName: string): string {
-  const normalizedName = gameName.toLocaleLowerCase('de-DE');
-  return (
-    GAME_EMOJI_RULES.find(({ keywords }) =>
-      keywords.some((keyword) => normalizedName.includes(keyword))
-    )?.emoji ?? '🎮'
-  );
-}
 
 export default function RankingGameRow({
   gameId,
