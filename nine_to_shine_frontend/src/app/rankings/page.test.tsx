@@ -245,11 +245,28 @@ describe('RankingsPage season totals', () => {
   });
 
   it.each([
+    ['Sudoku', '🔢'],
+    ['Basketball Freiwürfe', '🏀'],
+    ['Stadt-Land-Fluss', '🗺️'],
+    ['Calcetto', '⚽'],
+    ['Trackmania', '🏎️'],
+    ['Fitness-Triathlon', '🏃'],
+    ['Steinschleuder schießen', '🎯'],
+    ['Minigolf', '⛳'],
+    ['Minigold', '⛳'],
+    ['Cornhole', '🎯'],
+    ['Warzone', '🎮'],
+    ['Watten', '🃏'],
+    ['Poker', '🃏'],
+    ['Eisstockschießen', '🥌'],
+    ['Eisstockschiessen', '🥌'],
     ['Bowling-Abend', '🎳'],
     ['Pubquiz', '💡'],
     ['Tischtennis', '🏓'],
     ['Schach', '♟️'],
     ['Darts', '🎯'],
+    ['Fuaßboll', '⚽'],
+    ['Fußball', '⚽'],
     ['Tischfußball', '⚽'],
     ['Unbekanntes Spiel', '🎮'],
   ])('maps %s to its game artwork', (gameName, emoji) => {
