@@ -31,6 +31,7 @@ import { useSnackbar } from 'notistack';
 
 import Layout from '@/components/Layout';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
+import PageTitle from '@/components/PageTitle';
 import RankingGameRow from './RankingGameRow';
 
 import {
@@ -209,29 +210,7 @@ const RankingsPage = () => {
         ) : (
           <Box sx={{ width: '100%', maxWidth: 1180, mx: 'auto' }}>
             <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
-              <Typography
-                component="h1"
-                sx={{
-                  color: 'text.primary',
-                  fontSize: { xs: '2.5rem', sm: '3.25rem' },
-                  fontWeight: 800,
-                  letterSpacing: '-0.04em',
-                  lineHeight: 1.05,
-                }}
-              >
-                Rangliste
-              </Typography>
-              <Box
-                aria-hidden="true"
-                sx={{
-                  width: 40,
-                  height: 6,
-                  mt: 1.25,
-                  mb: 1.75,
-                  borderRadius: 999,
-                  bgcolor: 'primary.main',
-                }}
-              />
+              <PageTitle title="Rangliste" />
 
               <TextField
                 select
@@ -239,6 +218,7 @@ const RankingsPage = () => {
                 value={selectedSeasonNumber ?? ''}
                 onChange={(event) => setSeasonNumber(Number(event.target.value))}
                 sx={{
+                  mt: 1.75,
                   width: { xs: '100%', md: 228 },
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2.5,

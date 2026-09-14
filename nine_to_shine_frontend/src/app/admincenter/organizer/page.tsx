@@ -43,7 +43,7 @@ import { useSnackbar } from 'notistack';
 import { useRouter } from 'next/navigation';
 
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
+import PageTitle from '@/components/PageTitle';
 import { apiOrganizerDuty, apiSeason, apiUsers } from '@/definitions/commands';
 import type {
   OrganizerDutyDto,
@@ -386,9 +386,19 @@ export default function OrganizerDutyPage() {
   return (
     <Layout>
       <Box sx={{ maxWidth: 900, mx: 'auto', p: 3 }}>
-        <Toolbar disableGutters sx={{ mb: 2, justifyContent: 'space-between' }}>
-          <CustomTitle text="Organisation Termine" />
-          <Stack direction="row" spacing={1}>
+        <Toolbar
+          component="header"
+          disableGutters
+          sx={{
+            mb: { xs: 3, md: 4 },
+            justifyContent: 'space-between',
+            alignItems: { xs: 'stretch', md: 'flex-start' },
+            flexDirection: { xs: 'column', md: 'row' },
+            gap: { xs: 2, md: 3 },
+          }}
+        >
+          <PageTitle title="Organisation Termine" />
+          <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
             <Button
               variant="outlined"
               startIcon={<SettingsIcon />}

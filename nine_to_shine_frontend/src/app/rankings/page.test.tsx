@@ -127,6 +127,9 @@ describe('RankingsPage season totals', () => {
   it('shows the selected season even when only one season exists', async () => {
     renderWithProviders(<RankingsPage />);
 
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Rangliste' })
+    ).toBeInTheDocument();
     const seasonSelect = await screen.findByRole('combobox', { name: 'Saison' });
 
     expect(seasonSelect).toHaveTextContent('Saison 7');

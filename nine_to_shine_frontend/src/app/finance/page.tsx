@@ -20,6 +20,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 import Layout from '@/components/Layout';
+import PageTitle from '@/components/PageTitle';
 
 type Tile = {
   href: string;
@@ -88,22 +89,10 @@ export default function FinancePage() {
     <Layout>
       <Box sx={{ width: '100%', maxWidth: 1120, mx: 'auto' }}>
         <Box sx={{ mb: { xs: 2, sm: 3 } }}>
-          <Typography
-            component="h1"
-            variant="h3"
-            sx={{
-              fontSize: { xs: '2rem', sm: '2.5rem' },
-              color: 'text.primary',
-            }}
-          >
-            Finanzen
-          </Typography>
-          <Typography
-            color="text.secondary"
-            sx={{ mt: 0.5, fontSize: { xs: '0.95rem', sm: '1.1rem' } }}
-          >
-            Behalte deine Finanzen im Überblick.
-          </Typography>
+          <PageTitle
+            title="Finanzen"
+            subtitle="Behalte deine Finanzen im Überblick."
+          />
         </Box>
 
         <Box
