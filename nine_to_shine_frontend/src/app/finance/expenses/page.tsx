@@ -10,7 +10,6 @@ import {
   Button,
   Typography,
   Paper,
-  Divider,
   CircularProgress,
   MenuItem,
 } from '@mui/material';
@@ -20,7 +19,7 @@ import { useRouter } from 'next/navigation';
 import { useSnackbar } from 'notistack';
 
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
+import PageTitle from '@/components/PageTitle';
 import { apiFinance, apiSeason, apiGame } from '@/definitions/commands';
 import type {
   CreateExpenseBatchRequest,
@@ -33,6 +32,15 @@ import ExpenseRow from '../../../components/ExpenseRow';
 import LoadingSkeleton from '@/components/LoadingSkeleton';
 
 type FormOutput = FormInput;
+
+const sectionSx = {
+  p: { xs: 2, sm: 3 },
+  border: 1,
+  borderColor: 'divider',
+  borderRadius: '16px',
+  bgcolor: 'background.paper',
+  boxShadow: '0 10px 30px rgba(7, 17, 47, 0.05)',
+};
 
 export default function ExpensesPage() {
   const { enqueueSnackbar } = useSnackbar();
@@ -179,14 +187,16 @@ export default function ExpensesPage() {
         component="form"
         onSubmit={handleSubmit(onSubmit)}
         noValidate
-        sx={{ maxWidth: 800, mx: 'auto', p: 3 }}
+        sx={{ maxWidth: 920, mx: 'auto' }}
       >
-        <CustomTitle text="Vereinsausgaben erfassen" />
+        <Box sx={{ mb: { xs: 2.5, sm: 3.5 } }}>
+          <PageTitle title="Vereinsausgaben erfassen" />
+        </Box>
 
         {/* --- OBERER BEREICH: KONTEXT --- */}
-        <Paper variant="outlined" sx={{ p: 2, mb: 4, mt: 2 }}>
-          <Stack spacing={3}>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+        <Paper elevation={0} sx={{ ...sectionSx, mb: 2.5 }}>
+          <Stack spacing={2.5}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2.5}>
               <TextField
                 fullWidth
                 label="Datum"
@@ -252,12 +262,14 @@ export default function ExpensesPage() {
         </Paper>
 
         {/* --- LISTE DER AUSGABEN --- */}
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Stack mb={2}>
-            <Typography variant="h6">Ausgaben</Typography>
+        <Paper elevation={0} sx={sectionSx}>
+          <Stack mb={2.25}>
+            <Typography variant="h5" fontWeight={800}>
+              Ausgaben
+            </Typography>
           </Stack>
 
-          <Stack spacing={2} divider={<Divider />}>
+          <Stack spacing={1.5}>
             {fields.map((field, index) => (
               <ExpenseRow
                 key={field.id}
@@ -270,28 +282,33 @@ export default function ExpensesPage() {
             ))}
           </Stack>
 
-          <Stack mb={2} mt={2}>
-            <Divider />
+          <Box sx={{ mt: 1.5 }}>
             <Button
               startIcon={<AddIcon />}
               variant="outlined"
               onClick={() => append({ amount: '', description: '' })}
-              size="small"
+              fullWidth
+              sx={{
+                minHeight: 48,
+                borderRadius: '8px',
+                fontWeight: 700,
+              }}
             >
               Ausgabe hinzufügen
             </Button>
-          </Stack>
+          </Box>
           {/* Summe */}
           <Box
             sx={{
-              mt: 3,
+              mt: 3.5,
               display: 'flex',
               justifyContent: 'flex-end',
-              borderTop: '1px dashed #ccc',
-              pt: 2,
+              borderTop: '1px dashed',
+              borderColor: 'divider',
+              pt: 2.5,
             }}
           >
-            <Typography variant="h6">
+            <Typography variant="h6" fontWeight={800}>
               Gesamt:{' '}
               {new Intl.NumberFormat('de-DE', {
                 style: 'currency',
@@ -303,7 +320,7 @@ export default function ExpensesPage() {
 
         {/* --- ACTION BUTTONS --- */}
         <Stack
-          direction="row"
+          direction={{ xs: 'column', sm: 'row' }}
           spacing={2}
           justifyContent="flex-end"
           sx={{ mt: 3 }}
@@ -311,7 +328,6 @@ export default function ExpensesPage() {
           <Button
             type="submit"
             variant="contained"
-            color="error" // Rot für Ausgaben
             size="large"
             disabled={isSubmitting}
             startIcon={
@@ -321,7 +337,13 @@ export default function ExpensesPage() {
                 <SaveIcon />
               )
             }
-            sx={{ px: 4 }}
+            sx={{
+              px: 4,
+              minHeight: 52,
+              borderRadius: '10px',
+              fontWeight: 700,
+              boxShadow: '0 8px 20px rgba(4, 150, 255, 0.25)',
+            }}
           >
             {isSubmitting ? 'Speichere...' : 'Ausgaben Speichern'}
           </Button>
