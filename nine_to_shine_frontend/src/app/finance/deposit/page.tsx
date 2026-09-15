@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState, useMemo } from 'react';
+import { ReactNode, Suspense, useEffect, useState, useMemo } from 'react';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -10,19 +10,24 @@ import {
   Button,
   Typography,
   Paper,
-  Divider,
   CircularProgress,
-  Chip,
   MenuItem,
   Alert,
+  InputAdornment,
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import AddIcon from '@mui/icons-material/Add';
+import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
+import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
+import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
+import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
+import SportsSoccerOutlinedIcon from '@mui/icons-material/SportsSoccerOutlined';
+import PaidOutlinedIcon from '@mui/icons-material/PaidOutlined';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSnackbar } from 'notistack';
 
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
+import PageTitle from '@/components/PageTitle';
 import {
   apiFinance,
   apiUsers,
@@ -53,6 +58,61 @@ import { buildDepositEditData } from './edit-data';
 
 type FormOutput = FormInput;
 const toMoneyAmount = (value: string) => Math.round(Number(value) * 100) / 100;
+
+const desktopMemberColumns =
+  'minmax(160px, 1.35fr) minmax(105px, 0.75fr) minmax(115px, 0.9fr) minmax(115px, 0.9fr) minmax(160px, 1.35fr)';
+
+const sectionSx = {
+  p: { xs: 2, sm: 2.5 },
+  border: 1,
+  borderColor: 'divider',
+  borderRadius: '16px',
+  bgcolor: 'background.paper',
+  boxShadow: '0 10px 30px rgba(7, 17, 47, 0.05)',
+};
+
+function StandardAmountBadge({
+  icon,
+  children,
+}: {
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Stack
+      direction="row"
+      spacing={1.25}
+      alignItems="center"
+      sx={{
+        px: 1.5,
+        py: 1,
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 999,
+        bgcolor: 'rgba(255, 255, 255, 0.82)',
+        boxShadow: '0 6px 18px rgba(7, 17, 47, 0.04)',
+      }}
+    >
+      <Box
+        aria-hidden="true"
+        sx={{
+          width: 34,
+          height: 34,
+          display: 'grid',
+          placeItems: 'center',
+          borderRadius: '50%',
+          bgcolor: '#EAF5FF',
+          color: 'primary.main',
+        }}
+      >
+        {icon}
+      </Box>
+      <Typography fontWeight={700} whiteSpace="nowrap">
+        {children}
+      </Typography>
+    </Stack>
+  );
+}
 
 export default function BulkDepositPage() {
   return (
@@ -381,46 +441,53 @@ function BulkDepositForm() {
         component="form"
         onSubmit={handleSubmit(onSubmit)}
         noValidate
-        sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}
+        sx={{ width: '100%', maxWidth: 1200, mx: 'auto', pb: 2 }}
       >
         <Box
           sx={{
             display: 'flex',
+            flexDirection: { xs: 'column', lg: 'row' },
             justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 2,
+            alignItems: { xs: 'stretch', lg: 'flex-end' },
+            gap: 3,
+            mb: 3,
           }}
         >
-          <CustomTitle
-            text={
-              isEditMode
-                ? 'Mitgliedsbeiträge bearbeiten'
-                : 'Mitgliedsbeiträge einfügen'
-            }
-          />
-        </Box>
+          <Box>
+            <Typography
+              variant="overline"
+              color="text.secondary"
+              sx={{ fontSize: '0.78rem' }}
+            >
+              Finanzen
+            </Typography>
+            <Box sx={{ mt: 0.25 }}>
+              <PageTitle
+                title={
+                  isEditMode
+                    ? 'Mitgliedsbeiträge bearbeiten'
+                    : 'Mitgliedsbeiträge einfügen'
+                }
+              />
+            </Box>
+          </Box>
 
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 2,
-          }}
-        >
-          <Chip
-            label={`${STD_MEMBER}€ selbst einzahlung`}
-            variant="outlined"
-            size="small"
-            sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}
-          />
-          <Chip
-            label={`${STD_CLUB}€ Vereinskasse`}
-            variant="outlined"
-            size="small"
-            sx={{ fontWeight: 'bold', bgcolor: '#f5f5f5' }}
-          />
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={1.25}
+            sx={{ alignSelf: { lg: 'center' } }}
+          >
+            <StandardAmountBadge
+              icon={<AccountBalanceWalletOutlinedIcon fontSize="small" />}
+            >
+              {STD_MEMBER}€ Selbsteinzahlung
+            </StandardAmountBadge>
+            <StandardAmountBadge
+              icon={<AccountBalanceOutlinedIcon fontSize="small" />}
+            >
+              {STD_CLUB}€ Vereinskasse
+            </StandardAmountBadge>
+          </Stack>
         </Box>
 
         {blockingError && (
@@ -447,88 +514,163 @@ function BulkDepositForm() {
           </Alert>
         )}
 
-        {/* --- OBERER BEREICH --- */}
         <Paper
-          variant="outlined"
-          sx={{ p: 2, mb: 4, mt: 4, bgcolor: '#f8f9fa' }}
+          elevation={0}
+          sx={{ ...sectionSx, mb: 2.25 }}
         >
-          <Stack spacing={3}>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-              <TextField
-                fullWidth
-                label="Datum"
-                type="date"
-                {...register('globalDate')}
-                slotProps={{ inputLabel: { shrink: true } }}
-                error={!!errors.globalDate}
-                helperText={errors.globalDate?.message}
-              />
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: 'minmax(0, 1fr)',
+                md: 'repeat(3, minmax(0, 1fr))',
+              },
+              gap: 2,
+            }}
+          >
+            <TextField
+              fullWidth
+              label="Datum"
+              type="date"
+              {...register('globalDate')}
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <CalendarTodayOutlinedIcon color="primary" />
+                    </InputAdornment>
+                  ),
+                },
+                inputLabel: { shrink: true },
+              }}
+              error={!!errors.globalDate}
+              helperText={errors.globalDate?.message}
+            />
 
-              <Controller
-                name="seasonId"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    select
-                    label="Saison"
-                    fullWidth
-                    value={field.value ?? ''}
-                    onChange={(e) => field.onChange(Number(e.target.value))}
-                    error={!!errors.seasonId}
-                    helperText={errors.seasonId?.message}
-                    disabled={isEditMode}
-                  >
-                    {seasons.map((s) => (
-                      <MenuItem key={s.id} value={s.id}>
-                        Saison {s.seasonNumber}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                )}
-              />
-
-              <Controller
-                name="gameId"
-                control={control}
-                render={({ field }) => (
-                  <TextField
-                    {...field}
-                    select
-                    label="Spiel (Optional)"
-                    fullWidth
-                    value={field.value ?? ''}
-                    onChange={(e) => {
-                      const newGameId = Number(e.target.value) || undefined;
-                      handleGameChange(newGameId, field.onChange);
-                    }}
-                    disabled={
-                      isEditMode ||
-                      !selectedSeasonId ||
-                      availableGames.length === 0
-                    }
-                  >
-                    <MenuItem value="">
-                      <em>Kein Spiel</em>
+            <Controller
+              name="seasonId"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  select
+                  label="Saison"
+                  fullWidth
+                  value={field.value ?? ''}
+                  onChange={(e) => field.onChange(Number(e.target.value))}
+                  error={!!errors.seasonId}
+                  helperText={errors.seasonId?.message}
+                  disabled={isEditMode}
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <LayersOutlinedIcon color="primary" />
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                >
+                  {seasons.map((s) => (
+                    <MenuItem key={s.id} value={s.id}>
+                      Saison {s.seasonNumber}
                     </MenuItem>
-                    {availableGames.map((g) => (
-                      <MenuItem key={g.id} value={g.id}>
-                        {g.gameName}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                )}
-              />
-            </Stack>
-          </Stack>
+                  ))}
+                </TextField>
+              )}
+            />
+
+            <Controller
+              name="gameId"
+              control={control}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  select
+                  label="Spiel (Optional)"
+                  fullWidth
+                  value={field.value ?? ''}
+                  onChange={(e) => {
+                    const newGameId = Number(e.target.value) || undefined;
+                    handleGameChange(newGameId, field.onChange);
+                  }}
+                  disabled={
+                    isEditMode ||
+                    !selectedSeasonId ||
+                    availableGames.length === 0
+                  }
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SportsSoccerOutlinedIcon color="primary" />
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                >
+                  <MenuItem value="">
+                    <em>Kein Spiel</em>
+                  </MenuItem>
+                  {availableGames.map((g) => (
+                    <MenuItem key={g.id} value={g.id}>
+                      {g.gameName}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              )}
+            />
+          </Box>
         </Paper>
 
-        {/* --- LISTE DER MITGLIEDER --- */}
-        <Paper variant="outlined" sx={{ p: 2 }}>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            Mitglieder
-          </Typography>
-          <Stack spacing={2} divider={<Divider />}>
+        <Paper elevation={0} sx={{ ...sectionSx, mb: 2.25 }}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            spacing={2}
+            sx={{ mb: 2 }}
+          >
+            <Typography variant="h5" fontWeight={800}>
+              Mitglieder
+            </Typography>
+            <Box
+              sx={{
+                px: 1.5,
+                py: 0.6,
+                borderRadius: 999,
+                bgcolor: '#F0F5FB',
+                color: 'text.secondary',
+                fontSize: '0.82rem',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {memberFields.length}{' '}
+              {memberFields.length === 1 ? 'Mitglied' : 'Mitglieder'}
+            </Box>
+          </Stack>
+
+          <Box
+            aria-hidden="true"
+            sx={{
+              display: { xs: 'none', md: 'grid' },
+              gridTemplateColumns: desktopMemberColumns,
+              gap: 1.5,
+              px: 1.5,
+              mb: 1,
+              color: 'text.secondary',
+            }}
+          >
+            {['Mitglied', 'Bezahlt', 'Gutschrift', 'Kasse', 'Bemerkung'].map(
+              (label) => (
+                <Typography key={label} variant="overline" fontSize="0.68rem">
+                  {label}
+                </Typography>
+              )
+            )}
+          </Box>
+
+          <Stack spacing={1}>
             {memberFields.map((field, index) => (
               <MemberRow
                 key={field.id}
@@ -541,28 +683,51 @@ function BulkDepositForm() {
           </Stack>
         </Paper>
 
-        {/* --- SONSTIGE EINNAHMEN --- */}
-        <Paper variant="outlined" sx={{ p: 2, mt: 4 }}>
+        <Paper elevation={0} sx={{ ...sectionSx }}>
           <Stack
-            direction="column"
+            direction={{ xs: 'column', sm: 'row' }}
             justifyContent="space-between"
-            alignItems="flex-start"
-            mb={2}
-            gap={3}
+            alignItems={{ xs: 'stretch', sm: 'center' }}
+            spacing={2}
+            sx={{ mb: 2.5 }}
           >
-            <Box>
-              <Typography variant="h6">Sonstige Einnahmen</Typography>
-              <Typography variant="caption" color="text.secondary">
-                Zusätzliche Beträge (z.B. Strafen, Geld übrig), unabhängig von
-                Mitgliedern.
-              </Typography>
-            </Box>
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <Box
+                aria-hidden="true"
+                sx={{
+                  width: 46,
+                  height: 46,
+                  display: 'grid',
+                  placeItems: 'center',
+                  flexShrink: 0,
+                  borderRadius: '50%',
+                  bgcolor: '#EAF5FF',
+                  color: 'primary.main',
+                }}
+              >
+                <PaidOutlinedIcon />
+              </Box>
+              <Box>
+                <Typography variant="h5" fontWeight={800}>
+                  Sonstige Einnahmen
+                </Typography>
+                <Typography color="text.secondary" fontSize="0.9rem">
+                  Zusätzliche Beträge (z. B. Strafen oder Restgeld), unabhängig
+                  von Mitgliedern.
+                </Typography>
+              </Box>
+            </Stack>
             <Button
               startIcon={<AddIcon />}
               variant="outlined"
               size="small"
               onClick={() => appendOtherIncome({ amount: '', description: '' })}
-              fullWidth
+              sx={{
+                minWidth: 160,
+                alignSelf: { xs: 'stretch', sm: 'center' },
+                borderRadius: '10px',
+                py: 1,
+              }}
             >
               Hinzufügen
             </Button>
@@ -582,9 +747,8 @@ function BulkDepositForm() {
           </Stack>
         </Paper>
 
-        {/* --- ACTION BUTTONS --- */}
         <Stack
-          direction="row"
+          direction={{ xs: 'column-reverse', sm: 'row' }}
           spacing={2}
           justifyContent="flex-end"
           sx={{ mt: 3 }}
@@ -598,6 +762,7 @@ function BulkDepositForm() {
               onClick={() =>
                 router.push(`${routes.financesGames}/${editGameId}`)
               }
+              sx={{ minWidth: 150, borderRadius: '10px' }}
             >
               Abbrechen
             </Button>
@@ -614,7 +779,12 @@ function BulkDepositForm() {
                 <SaveIcon />
               )
             }
-            sx={{ px: 4 }}
+            sx={{
+              minWidth: { sm: 210 },
+              px: 4,
+              borderRadius: '10px',
+              boxShadow: '0 8px 20px rgba(4, 150, 255, 0.24)',
+            }}
           >
             {isSubmitting
               ? isEditMode
