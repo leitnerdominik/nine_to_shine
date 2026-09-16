@@ -347,7 +347,7 @@ const RankingsPage = () => {
               </Table>
             </TableContainer>
 
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 5 }}>
+            <Box sx={{ mb: 5 }}>
               <Button
                 component={NextLink}
                 href={
@@ -356,9 +356,12 @@ const RankingsPage = () => {
                     : '/rankings/overview'
                 }
                 variant="outlined"
+                fullWidth
                 sx={{
                   borderRadius: 999,
                   px: 2.5,
+                  py: 1.5,
+                  fontSize: '1.05rem',
                   textTransform: 'none',
                   fontWeight: 700,
                   bgcolor: alpha(theme.palette.background.paper, 0.84),

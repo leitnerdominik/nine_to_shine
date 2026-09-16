@@ -25,7 +25,9 @@ import {
   DialogContentText,
   DialogTitle,
   Alert,
+  useMediaQuery,
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon from '@mui/icons-material/Clear';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -47,7 +49,52 @@ const formatCurrency = (amount: number) =>
 // Typ-Definition für die Filter-Logik
 type FilterDirection = 'income' | 'expense' | '';
 
+const getDisplayAmount = (transaction: FinanceDto) =>
+  transaction.direction === 'income' ? transaction.amount : -transaction.amount;
+
+const getAccountLabel = (transaction: FinanceDto) =>
+  transaction.userDisplayName || 'Vereinskasse';
+
+const getChipColor = (
+  category: FinanceDto['category']
+): 'default' | 'primary' | 'warning' | 'success' => {
+  if (category === 'DUES') return 'success';
+  if (category === 'EVENT') return 'primary';
+  if (category === 'TRIP') return 'warning';
+  return 'default';
+};
+
+function TransactionCategory({ category }: { category: FinanceDto['category'] }) {
+  return (
+    <Chip
+      label={category}
+      size="small"
+      variant="outlined"
+      color={getChipColor(category)}
+      sx={{ borderRadius: 999, fontWeight: 500, px: 0.5 }}
+    />
+  );
+}
+
+function TransactionAmount({ transaction }: { transaction: FinanceDto }) {
+  return (
+    <Typography
+      component="span"
+      sx={{
+        fontWeight: 700,
+        color: transaction.direction === 'income' ? '#138a43' : '#d32f2f',
+        fontSize: { xs: '1.05rem', md: '1rem' },
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {formatCurrency(getDisplayAmount(transaction))}
+    </Typography>
+  );
+}
+
 export default function TransactionsPage() {
+  const theme = useTheme();
+  const isDesktop = useMediaQuery(theme.breakpoints.up('md'), { noSsr: true });
   const [loading, setLoading] = useState(true);
   const [transactions, setTransactions] = useState<FinanceDto[]>([]);
   const [users, setUsers] = useState<UserDto[]>([]);
@@ -136,7 +183,7 @@ export default function TransactionsPage() {
     setSelectedIds([]);
   };
 
-  const handleClick = (event: React.MouseEvent<unknown>, id: number) => {
+  const handleClick = (id: number) => {
     const selectedIndex = selectedIds.indexOf(id);
     let newSelected: number[] = [];
 
@@ -249,13 +296,16 @@ export default function TransactionsPage() {
         <Paper
           variant="outlined"
           sx={{
-            p: 2,
-            mb: 3,
-            bgcolor: '#f8f9fa',
+            p: { xs: 1.5, md: 2 },
+            mb: { xs: 2, md: 3 },
+            bgcolor: '#fff',
+            borderColor: '#dbe8f6',
+            borderRadius: 3,
+            boxShadow: '0 6px 20px rgba(31, 90, 150, 0.06)',
             display: 'flex',
             flexDirection: { xs: 'column', md: 'row' },
             gap: 2,
-            alignItems: 'center',
+            alignItems: { xs: 'stretch', md: 'center' },
           }}
         >
           <Box
@@ -264,6 +314,7 @@ export default function TransactionsPage() {
               alignItems: 'center',
               gap: 1,
               color: 'text.secondary',
+              minWidth: { md: 90 },
             }}
           >
             <FilterListIcon />
@@ -283,7 +334,7 @@ export default function TransactionsPage() {
                 e.target.value === '' ? '' : Number(e.target.value)
               )
             }
-            sx={{ minWidth: 200 }}
+            sx={{ minWidth: { md: 200 } }}
           >
             <MenuItem value="">
               <em>Alle anzeigen</em>
@@ -304,7 +355,7 @@ export default function TransactionsPage() {
             onChange={(e) =>
               setFilterDirection(e.target.value as FilterDirection)
             }
-            sx={{ minWidth: 200 }}
+            sx={{ minWidth: { md: 230 } }}
           >
             <MenuItem value="">
               <em>Alle</em>
@@ -316,7 +367,11 @@ export default function TransactionsPage() {
           {/* Reset Button */}
           {(filterUserId !== '' || filterDirection !== '') && (
             <Tooltip title="Filter zurücksetzen">
-              <IconButton onClick={handleResetFilters} size="small">
+              <IconButton
+                onClick={handleResetFilters}
+                size="small"
+                aria-label="Filter zurücksetzen"
+              >
                 <ClearIcon />
               </IconButton>
             </Tooltip>
@@ -336,140 +391,243 @@ export default function TransactionsPage() {
           )}
         </Paper>
 
-        {/* --- TABELLE --- */}
+        {/* --- TRANSAKTIONEN --- */}
         {loading ? (
           <LoadingSkeleton />
         ) : !loadError ? (
-          <TableContainer component={Paper} variant="outlined">
-            <Table>
-              <TableHead sx={{ bgcolor: '#eee' }}>
-                <TableRow>
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      color="primary"
-                      indeterminate={
-                        selectedIds.length > 0 &&
-                        selectedIds.length < transactions.length
-                      }
-                      checked={
-                        transactions.length > 0 &&
-                        selectedIds.length === transactions.length
-                      }
-                      onChange={handleSelectAllClick}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <strong>Datum</strong>
-                  </TableCell>
-                  <TableCell>
-                    <strong>Wer / Konto</strong>
-                  </TableCell>
-                  <TableCell>
-                    <strong>Kategorie</strong>
-                  </TableCell>
-                  <TableCell>
-                    <strong>Beschreibung</strong>
-                  </TableCell>
-                  <TableCell align="right">
-                    <strong>Betrag</strong>
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {transactions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
-                      Keine Transaktionen gefunden.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  transactions.map((tx) => {
-                    const isSelected = selectedIds.indexOf(tx.id) !== -1;
-                    const isIncome = tx.direction === 'income';
-                    // Bei Ausgaben ein Minus davor anzeigen
-                    const displayAmount = isIncome ? tx.amount : -tx.amount;
+          <>
+            {transactions.length === 0 ? (
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 3,
+                  textAlign: 'center',
+                  borderRadius: 3,
+                  borderColor: '#dbe8f6',
+                }}
+              >
+                Keine Transaktionen gefunden.
+              </Paper>
+            ) : isDesktop ? (
+              <TableContainer
+                component={Paper}
+                variant="outlined"
+                sx={{
+                  borderColor: '#dbe8f6',
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                  boxShadow: '0 8px 24px rgba(31, 90, 150, 0.07)',
+                }}
+              >
+                <Table sx={{ minWidth: 760 }}>
+                  <TableHead sx={{ bgcolor: '#f4f8fc' }}>
+                    <TableRow>
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          color="primary"
+                          inputProps={{
+                            'aria-label': 'Alle Buchungen auswählen',
+                          }}
+                          indeterminate={
+                            selectedIds.length > 0 &&
+                            selectedIds.length < transactions.length
+                          }
+                          checked={selectedIds.length === transactions.length}
+                          onChange={handleSelectAllClick}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Datum</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        Wer / Konto
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        Kategorie
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        Beschreibung
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>
+                        Betrag
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {transactions.map((tx) => {
+                      const isSelected = selectedIds.indexOf(tx.id) !== -1;
+                      const isGlobal = !tx.userId;
 
-                    // Konto-Anzeige: User Name oder "Vereinskasse"
-                    const accountLabel = tx.userDisplayName || 'Vereinskasse';
-                    const isGlobal = !tx.userId;
-
-                    // Chip Farbe Logik
-                    let chipColor:
-                      | 'default'
-                      | 'primary'
-                      | 'secondary'
-                      | 'error'
-                      | 'info'
-                      | 'success'
-                      | 'warning' = 'default';
-
-                    if (tx.category === 'DUES') chipColor = 'success';
-                    else if (tx.category === 'EVENT') chipColor = 'primary';
-                    else if (tx.category === 'TRIP') chipColor = 'warning';
-
-                    return (
-                      <TableRow
-                        key={tx.id}
-                        hover
-                        role="checkbox"
-                        aria-checked={isSelected}
-                        selected={isSelected}
-                      >
-                        <TableCell padding="checkbox">
-                          <Checkbox
-                            color="primary"
-                            checked={isSelected}
-                            onClick={(event) => handleClick(event, tx.id)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {dayjs(tx.occurredAt).format('DD.MM.YYYY')}
-                        </TableCell>
-                        <TableCell>
-                          <Typography
-                            variant="body2"
-                            sx={{ fontWeight: isGlobal ? 'bold' : 'normal' }}
-                          >
-                            {accountLabel}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={tx.category}
-                            size="small"
-                            variant="outlined"
-                            color={chipColor}
-                          />
-                        </TableCell>
-                        <TableCell sx={{ maxWidth: 300 }}>
-                          {tx.description || '-'}
-                          {tx.gameName && (
+                      return (
+                        <TableRow
+                          key={tx.id}
+                          hover
+                          selected={isSelected}
+                        >
+                          <TableCell padding="checkbox">
+                            <Checkbox
+                              color="primary"
+                              checked={isSelected}
+                              inputProps={{
+                                'aria-label': `Buchung vom ${dayjs(
+                                  tx.occurredAt
+                                ).format(
+                                  'DD.MM.YYYY'
+                                )} für ${getAccountLabel(tx)} auswählen`,
+                              }}
+                              onChange={() => handleClick(tx.id)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {dayjs(tx.occurredAt).format('DD.MM.YYYY')}
+                          </TableCell>
+                          <TableCell>
                             <Typography
-                              variant="caption"
-                              display="block"
-                              color="text.secondary"
+                              variant="body2"
+                              sx={{
+                                fontWeight: isGlobal ? 'bold' : 'normal',
+                              }}
                             >
-                              Spiel: {tx.gameName}
+                              {getAccountLabel(tx)}
                             </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell
-                          align="right"
+                          </TableCell>
+                          <TableCell>
+                            <TransactionCategory category={tx.category} />
+                          </TableCell>
+                          <TableCell sx={{ maxWidth: 300 }}>
+                            {tx.description || '-'}
+                            {tx.gameName && (
+                              <Typography
+                                variant="caption"
+                                display="block"
+                                color="text.secondary"
+                              >
+                                Spiel: {tx.gameName}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                            <TransactionAmount transaction={tx} />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Box>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    mb: 1,
+                    px: 0.5,
+                  }}
+                >
+                  <Checkbox
+                    size="small"
+                    color="primary"
+                    inputProps={{ 'aria-label': 'Alle auswählen' }}
+                    indeterminate={
+                      selectedIds.length > 0 &&
+                      selectedIds.length < transactions.length
+                    }
+                    checked={selectedIds.length === transactions.length}
+                    onChange={handleSelectAllClick}
+                  />
+                  <Typography variant="body2" color="text.secondary">
+                    Alle auswählen
+                  </Typography>
+                </Box>
+                {transactions.map((tx) => {
+                  const isSelected = selectedIds.includes(tx.id);
+                  return (
+                    <Paper
+                      key={tx.id}
+                      component="article"
+                      variant="outlined"
+                      sx={{
+                        p: 1.5,
+                        mb: 1.25,
+                        borderRadius: 3,
+                        borderColor: isSelected ? '#90caf9' : '#dbe8f6',
+                        bgcolor: isSelected ? '#eef8ff' : '#fff',
+                        boxShadow: '0 4px 14px rgba(31, 90, 150, 0.05)',
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: '32px minmax(0, 1fr) auto',
+                          gap: 1,
+                          alignItems: 'start',
+                        }}
+                      >
+                        <Checkbox
+                          color="primary"
+                          checked={isSelected}
+                          inputProps={{
+                            'aria-label': `Buchung vom ${dayjs(
+                              tx.occurredAt
+                            ).format(
+                              'DD.MM.YYYY'
+                            )} für ${getAccountLabel(tx)} auswählen`,
+                          }}
+                          onChange={() => handleClick(tx.id)}
+                          sx={{ p: 0.25, mt: 0.25 }}
+                        />
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            {dayjs(tx.occurredAt).format('DD.MM.YYYY')}
+                          </Typography>
+                          <Typography
+                            sx={{
+                              fontWeight: !tx.userId ? 700 : 500,
+                              overflowWrap: 'anywhere',
+                            }}
+                          >
+                            {getAccountLabel(tx)}
+                          </Typography>
+                        </Box>
+                        <TransactionAmount transaction={tx} />
+                      </Box>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          ml: 5,
+                          mt: 0.75,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <TransactionCategory category={tx.category} />
+                        <Typography
                           sx={{
-                            fontWeight: 'bold',
-                            color: isIncome ? 'success.main' : 'error.main',
-                            fontSize: '1rem',
+                            color: 'text.secondary',
+                            overflowWrap: 'anywhere',
                           }}
                         >
-                          {formatCurrency(displayAmount)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                          {tx.description || '-'}
+                        </Typography>
+                        {tx.gameName && (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              flexBasis: '100%',
+                              overflowWrap: 'anywhere',
+                            }}
+                          >
+                            Spiel: {tx.gameName}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Paper>
+                  );
+                })}
+              </Box>
+            )}
+          </>
         ) : null}
       </Box>
 

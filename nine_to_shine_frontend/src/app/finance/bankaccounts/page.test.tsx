@@ -18,10 +18,6 @@ vi.mock('@/components/Layout', () => ({
     React.createElement(React.Fragment, null, children),
 }));
 
-vi.mock('@/components/LoadingSkeleton', () => ({
-  default: () => React.createElement('div', null, 'Loading accounts'),
-}));
-
 describe('BankAccountsPage', () => {
   beforeEach(() => {
     mocks.getBalanceOverview.mockResolvedValue({
@@ -42,8 +38,16 @@ describe('BankAccountsPage', () => {
       expect(mocks.getBalanceOverview).toHaveBeenCalledOnce()
     );
     expect(await screen.findByText('Gesamtvermögen')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Kontenübersicht' })).toBeVisible();
+    expect(
+      screen.queryByText('Alle Konten und Mitgliedskonten auf einen Blick.')
+    ).not.toBeInTheDocument();
     expect(screen.getByText('Reise Kasse')).toBeInTheDocument();
     expect(screen.getByText('Vereinskasse')).toBeInTheDocument();
+    expect(screen.getByText('Mitgliedskonten')).toBeInTheDocument();
+    expect(
+      screen.getByText('Kontostände der einzelnen Mitglieder.')
+    ).toBeInTheDocument();
     expect(screen.getByText('Nina')).toBeInTheDocument();
     expect(screen.getByText('Alex')).toBeInTheDocument();
     expect(screen.getByText('95,00 €')).toBeInTheDocument();
@@ -51,6 +55,36 @@ describe('BankAccountsPage', () => {
     expect(screen.getByText('25,00 €')).toBeInTheDocument();
     expect(screen.getByText('15,00 €')).toBeInTheDocument();
     expect(screen.getByText('10,00 €')).toBeInTheDocument();
+  });
+
+  it('links every account card to its existing destination', async () => {
+    renderWithProviders(<BankAccountsPage />);
+
+    expect(
+      await screen.findByRole('link', { name: /Gesamtvermögen: 95,00/ })
+    ).toHaveAttribute('href', '/finance/transactions');
+    expect(
+      screen.getByRole('link', { name: /Reise Kasse: 25,00/ })
+    ).toHaveAttribute('href', '/finance/transactions');
+    expect(
+      screen.getByRole('link', { name: /Vereinskasse: 70,00/ })
+    ).toHaveAttribute('href', '/finance/bankaccounts/n2s-account');
+    expect(
+      screen.getByRole('link', { name: /Nina: 15,00/ })
+    ).toHaveAttribute('href', '/finance/bankaccounts/1');
+    expect(
+      screen.getByRole('link', { name: /Alex: 10,00/ })
+    ).toHaveAttribute('href', '/finance/bankaccounts/2');
+  });
+
+  it('shows an accessible page-specific loading state', () => {
+    mocks.getBalanceOverview.mockReturnValue(new Promise(() => undefined));
+
+    renderWithProviders(<BankAccountsPage />);
+
+    expect(
+      screen.getByRole('status', { name: 'Konten werden geladen' })
+    ).toHaveAttribute('aria-busy', 'true');
   });
 
   it('shows an initial-load error instead of zero accounts and retries', async () => {

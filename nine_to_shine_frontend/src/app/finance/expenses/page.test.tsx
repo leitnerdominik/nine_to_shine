@@ -48,12 +48,22 @@ describe('ExpensesPage', () => {
     expect(
       await screen.findByRole('heading', { name: 'Vereinsausgaben erfassen' })
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Erfasse die Ausgaben für ein Spiel, eine Saison oder einen sonstigen Anlass.'
+      )
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Löschen' })).toBeDisabled();
+    expect(screen.getByText(/Gesamt:/)).toHaveTextContent('Gesamt: 0,00 €');
     await browser.type(screen.getByRole('spinbutton', { name: 'Betrag' }), '12.5');
     await browser.type(
       screen.getByRole('textbox', { name: 'Verwendungszweck (Optional)' }),
       'Pizza'
     );
     await browser.click(screen.getByRole('button', { name: 'Ausgabe hinzufügen' }));
+
+    expect(screen.getAllByRole('button', { name: 'Löschen' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Löschen' })[0]).toBeEnabled();
 
     const amounts = screen.getAllByRole('spinbutton', { name: 'Betrag' });
     const descriptions = screen.getAllByRole('textbox', {

@@ -27,7 +27,16 @@ export default function ExpenseRow({
   const rowError = errors.items?.[index];
 
   return (
-    <Stack direction="column" spacing={2} alignItems="flex-start">
+    <Stack
+      direction={{ xs: 'column', sm: 'row' }}
+      spacing={2}
+      alignItems={{ xs: 'stretch', sm: 'flex-start' }}
+      sx={{
+        p: { xs: 1.5, sm: 1.75 },
+        borderRadius: '12px',
+        bgcolor: '#F4F8FD',
+      }}
+    >
       <TextField
         label="Betrag"
         type="number"
@@ -40,6 +49,11 @@ export default function ExpenseRow({
             endAdornment: <InputAdornment position="end">€</InputAdornment>,
           },
         }}
+        sx={{
+          width: { xs: '100%', sm: 260 },
+          flexShrink: 0,
+          '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' },
+        }}
       />
 
       <TextField
@@ -49,14 +63,26 @@ export default function ExpenseRow({
         error={!!rowError?.description}
         helperText={rowError?.description?.message}
         placeholder="z.B. Essen, Pokale..."
+        sx={{
+          flex: 1,
+          '& .MuiOutlinedInput-root': { bgcolor: 'background.paper' },
+        }}
       />
 
-      <Box sx={{ pt: 1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: { xs: 'flex-end', sm: 'center' },
+          alignItems: 'center',
+          minHeight: { sm: 56 },
+          px: { sm: 0.25 },
+        }}
+      >
         <IconButton
           onClick={onRemove}
           disabled={!canRemove}
-          color="error"
           aria-label="Löschen"
+          sx={{ color: 'text.secondary' }}
         >
           <DeleteIcon />
         </IconButton>

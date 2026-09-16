@@ -1,12 +1,13 @@
 import {
-  Stack,
-  TextField,
   Box,
   IconButton,
   InputAdornment,
+  Stack,
+  TextField,
+  Tooltip,
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import { UseFormRegister, FieldErrors } from 'react-hook-form';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import { FieldErrors, UseFormRegister } from 'react-hook-form';
 import { FormInput } from '../schema/deposit';
 
 interface DepositOtherIncomeRowProps {
@@ -30,11 +31,12 @@ export default function DepositOtherIncomeRow({
     <Stack
       direction={{ xs: 'column', sm: 'row' }}
       spacing={2}
-      alignItems="flex-start"
+      alignItems={{ xs: 'stretch', sm: 'flex-start' }}
     >
       <TextField
         label="Betrag"
         type="number"
+        size="small"
         {...register(`otherIncomes.${index}.amount`)}
         error={!!rowError?.amount}
         helperText={rowError?.amount?.message}
@@ -43,25 +45,31 @@ export default function DepositOtherIncomeRow({
             endAdornment: <InputAdornment position="end">€</InputAdornment>,
           },
         }}
-        sx={{ width: { xs: '100%', sm: 150 } }}
+        sx={{ width: { xs: '100%', sm: 220 }, flexShrink: 0 }}
       />
 
       <TextField
         fullWidth
         label="Bemerkung"
+        size="small"
         {...register(`otherIncomes.${index}.description`)}
-        placeholder="z.B. Geld übrig essen"
+        placeholder="z. B. Strafe oder Restgeld"
       />
 
-      <Box sx={{ pt: 1 }}>
-        <IconButton
-          onClick={onRemove}
-          disabled={!canRemove}
-          color="error"
-          size="small"
-        >
-          <DeleteIcon />
-        </IconButton>
+      <Box sx={{ alignSelf: { xs: 'flex-end', sm: 'center' } }}>
+        <Tooltip title={canRemove ? 'Einnahme entfernen' : ''}>
+          <span>
+            <IconButton
+              aria-label="Einnahme entfernen"
+              onClick={onRemove}
+              disabled={!canRemove}
+              size="small"
+              sx={{ color: 'text.secondary' }}
+            >
+              <DeleteOutlineIcon />
+            </IconButton>
+          </span>
+        </Tooltip>
       </Box>
     </Stack>
   );

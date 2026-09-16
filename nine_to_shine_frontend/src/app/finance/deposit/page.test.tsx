@@ -276,6 +276,39 @@ describe('BulkDepositPage edit mode', () => {
     expect(mocks.push).toHaveBeenCalledWith('/finance');
   });
 
+  it('shows every member with initials and enables only selected member fields', async () => {
+    const browser = userEvent.setup();
+    mocks.search = '';
+    mocks.getUsers.mockResolvedValueOnce([
+      { ...user, displayName: 'Nina Hartmann' },
+      { ...user, id: 2, displayName: 'Tobias Gruber' },
+    ]);
+    renderWithProviders(<BulkDepositPage />);
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Mitgliedsbeiträge einfügen',
+      })
+    ).toBeInTheDocument();
+    expect(screen.getByText('2 Mitglieder')).toBeInTheDocument();
+    expect(screen.getByText('Nina Hartmann')).toBeInTheDocument();
+    expect(screen.getByText('Tobias Gruber')).toBeInTheDocument();
+    expect(screen.getByText('NH')).toBeInTheDocument();
+    expect(screen.getByText('TG')).toBeInTheDocument();
+
+    const checkboxes = screen.getAllByRole('checkbox', { name: 'Bezahlt' });
+    const memberAmounts = screen.getAllByRole('spinbutton', {
+      name: 'Gutschrift',
+    });
+    expect(memberAmounts[0]).toBeDisabled();
+    expect(memberAmounts[1]).toBeDisabled();
+
+    await browser.click(checkboxes[0]);
+
+    expect(memberAmounts[0]).toBeEnabled();
+    expect(memberAmounts[1]).toBeDisabled();
+  });
+
   it('keeps create-mode input and stays on the page when the batch fails', async () => {
     const browser = userEvent.setup();
     mocks.search = '';
