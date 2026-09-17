@@ -1,5 +1,5 @@
 import React from 'react';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/test-utils';
@@ -23,16 +23,6 @@ vi.mock('@/components/Layout', () => ({
     React.createElement(React.Fragment, null, children),
 }));
 
-vi.mock('@/components/TripCard', () => ({
-  default: ({
-    description,
-    onClick,
-  }: {
-    description: string;
-    onClick: () => void;
-  }) => React.createElement('button', { onClick }, description),
-}));
-
 describe('TripHistoryPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -54,12 +44,39 @@ describe('TripHistoryPage', () => {
     ]);
   });
 
+  it('renders the responsive page content and navigates to create a trip', async () => {
+    const browser = userEvent.setup();
+    renderWithProviders(<TripHistoryPage />);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Urlaube' })
+    ).toBeVisible();
+    const firstTrip = screen.getByRole('button', {
+      name: 'Details zu First',
+    });
+    expect(within(firstTrip).getByText('16.06.2026')).toBeVisible();
+    expect(within(firstTrip).getByText(/Gesamt: 10,00/)).toBeVisible();
+
+    await browser.click(
+      screen.getByRole('button', { name: 'Urlaub hinzufügen' })
+    );
+
+    expect(mocks.push).toHaveBeenCalledWith('/finance/trips/create-trip');
+  });
+
   it('renders same-timestamp trips separately and navigates by id', async () => {
     const browser = userEvent.setup();
     renderWithProviders(<TripHistoryPage />);
 
-    expect(await screen.findByRole('button', { name: 'First' })).toBeVisible();
-    await browser.click(screen.getByRole('button', { name: 'Second' }));
+    expect(
+      await screen.findByRole('button', { name: 'Details zu First' })
+    ).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'Details zu Second' })
+    ).toBeVisible();
+    await browser.click(
+      screen.getByRole('button', { name: 'Details zu Second' })
+    );
 
     expect(mocks.push).toHaveBeenCalledWith('/finance/trips/42');
   });
@@ -83,7 +100,22 @@ describe('TripHistoryPage', () => {
       screen.getByRole('button', { name: 'Erneut versuchen' })
     );
 
-    expect(await screen.findByRole('button', { name: 'First' })).toBeVisible();
+    expect(
+      await screen.findByRole('button', { name: 'Details zu First' })
+    ).toBeVisible();
     expect(mocks.getTrips).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows the empty state for a successful empty response', async () => {
+    mocks.getTrips.mockResolvedValue([]);
+
+    renderWithProviders(<TripHistoryPage />);
+
+    expect(
+      await screen.findByText('Keine Urlaubsreisen gefunden.')
+    ).toBeVisible();
+    expect(
+      screen.queryByRole('region', { name: 'Urlaubsreisen' })
+    ).not.toBeInTheDocument();
   });
 });
