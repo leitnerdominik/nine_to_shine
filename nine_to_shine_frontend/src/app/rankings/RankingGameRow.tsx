@@ -11,7 +11,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
-import { getGameEmoji } from './gameEmoji';
+import { getGameEmoji } from '@/common/gameEmoji';
 
 type RankingGameRowProps = {
   gameId: number;

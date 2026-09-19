@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/test-utils';
 import RankingsPage from './page';
-import { getGameEmoji } from './gameEmoji';
+import { getGameEmoji } from '@/common/gameEmoji';
 
 const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
