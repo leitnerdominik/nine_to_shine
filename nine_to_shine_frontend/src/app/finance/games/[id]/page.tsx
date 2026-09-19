@@ -33,9 +33,9 @@ import SavingsIcon from '@mui/icons-material/Savings';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
+import { alpha } from '@mui/material/styles';
 
 import Layout from '@/components/Layout';
-import CustomTitle from '@/components/CustomTitle';
 import { apiFinance, apiUsers, apiGame } from '@/definitions/commands';
 import type { UserDto, GameDto, FinanceDto } from '@/definitions/types';
 import { routes } from '@/common/routes';
@@ -54,6 +54,41 @@ interface PaymentRow {
   hasPaid: boolean;
   amount: number;
 }
+
+const sectionSx = {
+  p: { xs: 1.5, sm: 2 },
+  borderRadius: 3,
+  bgcolor: 'background.paper',
+  boxShadow: '0 8px 28px rgba(31, 74, 135, 0.07)',
+  minWidth: 0,
+};
+
+const summaryStackSx = {
+  height: '100%',
+  '@media (max-width: 360px)': {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: 0.25,
+    '& > :not(style) ~ :not(style)': { ml: 0 },
+  },
+};
+
+const tableSx = {
+  '& .MuiTableCell-root': {
+    px: { xs: 1.25, sm: 1.75 },
+    py: 0.75,
+    borderColor: '#E2EBF7',
+    fontSize: { xs: '0.8rem', sm: '0.9rem' },
+    whiteSpace: 'nowrap',
+  },
+  '& .MuiTableHead-root .MuiTableCell-root': {
+    bgcolor: '#F3F6FB',
+    color: 'text.primary',
+    fontWeight: 700,
+  },
+  '& .MuiTableRow-root:last-child .MuiTableCell-root': { borderBottom: 0 },
+};
 
 export default function GamePaymentDetailsPage({
   params,
@@ -201,306 +236,198 @@ export default function GamePaymentDetailsPage({
 
   return (
     <Layout>
-      <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
-        {/* Header */}
+      <Box sx={{ width: '100%', maxWidth: 1280, mx: 'auto', px: { xs: 0, sm: 1, md: 2 }, py: { xs: 1.5, md: 3 } }}>
         <Stack
+          component="header"
           direction="row"
           alignItems="flex-start"
           justifyContent="space-between"
-          spacing={2}
-          mb={3}
+          spacing={{ xs: 1, sm: 2 }}
+          sx={{ mb: { xs: 2, md: 3 } }}
         >
-          <Stack direction="row" alignItems="center" spacing={2}>
-            <IconButton onClick={() => router.back()}>
+          <Stack direction="row" alignItems="flex-start" spacing={{ xs: 0.5, sm: 1.5 }} sx={{ minWidth: 0 }}>
+            <IconButton aria-label="Zurück" onClick={() => router.back()} sx={{ mt: { xs: 0, sm: 0.5 }, flexShrink: 0 }}>
               <ArrowBackIcon />
             </IconButton>
-            <Box>
-              <CustomTitle text={game.gameName} />
-              <Typography variant="body2" color="text.secondary">
-                {game.playedAt
-                  ? dayjs(game.playedAt).format('DD.MM.YYYY HH:mm')
-                  : ''}
+            <Box sx={{ minWidth: 0 }}>
+              <Typography component="h1" sx={{ color: 'text.primary', fontSize: { xs: '1.35rem', sm: '2rem', md: '2.4rem' }, fontWeight: 800, letterSpacing: '-0.035em', lineHeight: 1.15, overflowWrap: 'anywhere' }}>
+                {game.gameName}
+              </Typography>
+              <Typography sx={{ mt: 0.5, color: 'text.secondary', fontSize: { xs: '0.8rem', sm: '1rem' } }}>
+                {game.playedAt ? dayjs(game.playedAt).format('DD.MM.YYYY HH:mm') : ''}
               </Typography>
             </Box>
           </Stack>
-          <EditGameDepositsButton gameId={gameId} />
+          <Box sx={{ flexShrink: 0, '& .MuiButton-root': { minWidth: { xs: 0, sm: 140 }, px: { xs: 1, sm: 2 }, fontSize: { xs: '0.75rem', sm: '0.9rem' }, whiteSpace: 'nowrap', bgcolor: 'background.paper' } }}>
+            <EditGameDepositsButton gameId={gameId} />
+          </Box>
         </Stack>
 
         {conflictError && (
           <Alert
             severity="warning"
-            sx={{ mb: 3 }}
-            action={
-              <Button
-                color="inherit"
-                size="small"
-                onClick={() => void fetchData()}
-              >
-                Neu laden
-              </Button>
-            }
+            sx={{ mb: 2 }}
+            action={<Button color="inherit" size="small" onClick={() => void fetchData()}>Neu laden</Button>}
           >
             {conflictError}
           </Alert>
         )}
 
-
-        {/* --- STATISTIK KARTEN --- */}
-        <Grid2 container spacing={2} sx={{ mb: 4 }}>
-          {/* Einnahmen */}
-          <Grid2 size={{ xs: 12, sm: 4 }}>
-            <Paper
-              variant="outlined"
-              sx={{ p: 2, borderColor: 'success.light', bgcolor: '#f0fcf4' }}
-            >
-              <Stack direction="row" spacing={1} alignItems="center" mb={1}>
-                <TrendingUpIcon color="success" />
-                <Typography variant="subtitle2" color="text.secondary">
-                  Einnahmen
-                </Typography>
+        <Grid2 container spacing={{ xs: 1, sm: 2 }} sx={{ mb: { xs: 2, md: 3 } }}>
+          <Grid2 size={4}>
+            <Paper variant="outlined" sx={{ height: '100%', minHeight: { xs: 94, sm: 112 }, p: { xs: 1, sm: 2 }, borderRadius: 2, borderColor: (theme) => alpha(theme.palette.success.main, 0.3), bgcolor: '#F4FFF8' }}>
+              <Stack direction="row" alignItems="center" spacing={{ xs: 0.5, sm: 1.5 }} sx={summaryStackSx}>
+                <TrendingUpIcon sx={{ color: '#087C3B', fontSize: { xs: 20, sm: 34 }, flexShrink: 0 }} />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ color: 'text.secondary', fontSize: { xs: '0.68rem', sm: '0.9rem' }, lineHeight: 1.2 }}>Einnahmen</Typography>
+                  <Typography sx={{ mt: 0.35, color: '#08703A', fontSize: { xs: '0.82rem', sm: '1.45rem', md: '1.9rem' }, fontWeight: 800, whiteSpace: 'nowrap' }}>{formatCurrency(totalIncome)}</Typography>
+                </Box>
               </Stack>
-              <Typography variant="h5" fontWeight="bold" color="success.main">
-                {formatCurrency(totalIncome)}
-              </Typography>
             </Paper>
           </Grid2>
-
-          {/* Ausgaben */}
-          <Grid2 size={{ xs: 12, sm: 4 }}>
-            <Paper
-              variant="outlined"
-              sx={{ p: 2, borderColor: 'error.light', bgcolor: '#fff5f5' }}
-            >
-              <Stack direction="row" spacing={1} alignItems="center" mb={1}>
-                <TrendingDownIcon color="error" />
-                <Typography variant="subtitle2" color="text.secondary">
-                  Ausgaben
-                </Typography>
+          <Grid2 size={4}>
+            <Paper variant="outlined" sx={{ height: '100%', minHeight: { xs: 94, sm: 112 }, p: { xs: 1, sm: 2 }, borderRadius: 2, borderColor: (theme) => alpha(theme.palette.error.main, 0.3), bgcolor: '#FFF8F8' }}>
+              <Stack direction="row" alignItems="center" spacing={{ xs: 0.5, sm: 1.5 }} sx={summaryStackSx}>
+                <TrendingDownIcon sx={{ color: '#E71928', fontSize: { xs: 20, sm: 34 }, flexShrink: 0 }} />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ color: 'text.secondary', fontSize: { xs: '0.68rem', sm: '0.9rem' }, lineHeight: 1.2 }}>Ausgaben</Typography>
+                  <Typography sx={{ mt: 0.35, color: '#D70F20', fontSize: { xs: '0.82rem', sm: '1.45rem', md: '1.9rem' }, fontWeight: 800, whiteSpace: 'nowrap' }}>{formatCurrency(totalExpense)}</Typography>
+                </Box>
               </Stack>
-              <Typography variant="h5" fontWeight="bold" color="error.main">
-                {formatCurrency(totalExpense)}
-              </Typography>
             </Paper>
           </Grid2>
-
-          {/* Bilanz */}
-          <Grid2 size={{ xs: 12, sm: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f8f9fa' }}>
-              <Stack direction="row" spacing={1} alignItems="center" mb={1}>
-                <AccountBalanceWalletIcon color="action" />
-                <Typography variant="subtitle2" color="text.secondary">
-                  Bilanz
-                </Typography>
+          <Grid2 size={4}>
+            <Paper variant="outlined" sx={{ height: '100%', minHeight: { xs: 94, sm: 112 }, p: { xs: 1, sm: 2 }, borderRadius: 2, borderColor: (theme) => alpha(theme.palette.primary.main, 0.3), bgcolor: '#F4F9FF' }}>
+              <Stack direction="row" alignItems="center" spacing={{ xs: 0.5, sm: 1.5 }} sx={summaryStackSx}>
+                <AccountBalanceWalletIcon sx={{ color: '#0872E8', fontSize: { xs: 20, sm: 34 }, flexShrink: 0 }} />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ color: 'text.secondary', fontSize: { xs: '0.68rem', sm: '0.9rem' }, lineHeight: 1.2 }}>Bilanz</Typography>
+                  <Typography sx={{ mt: 0.35, color: netResult >= 0 ? '#174384' : 'error.dark', fontSize: { xs: '0.82rem', sm: '1.45rem', md: '1.9rem' }, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                    {netResult > 0 ? '+' : ''}{formatCurrency(netResult)}
+                  </Typography>
+                </Box>
               </Stack>
-              <Typography
-                variant="h5"
-                fontWeight="bold"
-                color={netResult >= 0 ? 'success.dark' : 'error.dark'}
-              >
-                {netResult > 0 ? '+' : ''}
-                {formatCurrency(netResult)}
-              </Typography>
             </Paper>
           </Grid2>
         </Grid2>
 
-        <Stack spacing={4}>
-          {/* --- TABELLE 1: EINNAHMEN (SPIELER) --- */}
-          <Box>
-            <Typography
-              variant="h6"
-              gutterBottom
-              sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-            >
-              <CheckCircleIcon color="success" fontSize="small" /> Einnahmen
-              (Mitglieder)
-            </Typography>
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
-                <TableHead sx={{ bgcolor: '#f5f5f5' }}>
-                  <TableRow>
-                    <TableCell>
-                      <strong>Mitglied</strong>
-                    </TableCell>
-                    <TableCell align="center">
-                      <strong>Status</strong>
-                    </TableCell>
-                    <TableCell align="right">
-                      <strong>Betrag</strong>
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {playerRows.map((row) => (
-                    <TableRow key={row.user.id} hover>
-                      <TableCell>
-                        <Typography
-                          variant="body2"
-                          fontWeight={row.hasPaid ? 'bold' : 'normal'}
-                        >
-                          {row.user.displayName}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center">
-                        {row.hasPaid ? (
-                          <Chip
-                            label="Bezahlt"
-                            color="success"
-                            variant="outlined"
-                            size="small"
-                            sx={{ height: 24 }}
-                          />
-                        ) : (
-                          <Chip
-                            label="Offen"
-                            color="default"
-                            variant="outlined"
-                            size="small"
-                            sx={{ opacity: 0.5, height: 24 }}
-                          />
-                        )}
-                      </TableCell>
-                      <TableCell
-                        align="right"
-                        sx={{
-                          fontWeight: 'bold',
-                          color: row.hasPaid ? 'success.main' : 'text.disabled',
-                        }}
-                      >
-                        {row.hasPaid ? formatCurrency(row.amount) : '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
-
-          {/* --- TABELLE 2: SONSTIGE EINNAHMEN (NEU) --- */}
-          {otherIncomeList.length > 0 && (
-            <Box>
-              <Typography
-                variant="h6"
-                gutterBottom
-                sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-              >
-                <SavingsIcon color="success" fontSize="small" /> Sonstige
-                Einnahmen
-              </Typography>
-              <TableContainer component={Paper} variant="outlined">
-                <Table size="small">
-                  <TableHead sx={{ bgcolor: '#f5f5f5' }}>
+        <Grid2 container spacing={{ xs: 2, md: 2.5 }} alignItems="flex-start">
+          <Grid2 size={{ xs: 12, md: 7 }}>
+            <Paper component="section" elevation={0} sx={sectionSx}>
+              <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 1.75 }}>
+                <CheckCircleIcon sx={{ color: '#229349', fontSize: { xs: 27, sm: 31 } }} />
+                <Typography component="h2" sx={{ fontSize: { xs: '1.1rem', sm: '1.35rem' }, fontWeight: 800 }}>Einnahmen (Mitglieder)</Typography>
+              </Stack>
+              <TableContainer sx={{ border: 1, borderColor: '#DCE8F8', borderRadius: 1.5, overflowX: 'auto' }}>
+                <Table size="small" aria-label="Einnahmen der Mitglieder" sx={{ ...tableSx, minWidth: 330 }}>
+                  <TableHead>
                     <TableRow>
-                      <TableCell>
-                        <strong>Beschreibung</strong>
-                      </TableCell>
-                      <TableCell>
-                        <strong>Kategorie</strong>
-                      </TableCell>
-                      <TableCell align="right">
-                        <strong>Betrag</strong>
-                      </TableCell>
+                      <TableCell>Mitglied</TableCell>
+                      <TableCell align="center">Status</TableCell>
+                      <TableCell align="right">Betrag</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {otherIncomeList.map((tx) => (
-                      <TableRow key={tx.id} hover>
-                        <TableCell>
-                          <Typography variant="body2">
-                            {tx.description || 'Sonstiges'}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
+                    {playerRows.map((row) => (
+                      <TableRow key={row.user.id}>
+                        <TableCell>{row.user.displayName}</TableCell>
+                        <TableCell align="center">
                           <Chip
-                            label={tx.category}
-                            size="small"
+                            label={row.hasPaid ? 'Bezahlt' : 'Offen'}
                             variant="outlined"
-                            color="success"
+                            size="small"
+                            sx={{ height: 26, borderColor: row.hasPaid ? '#60C67B' : '#CDD8E8', color: row.hasPaid ? '#08703A' : 'text.secondary', bgcolor: 'background.paper' }}
                           />
                         </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{ fontWeight: 'bold', color: 'success.main' }}
-                        >
-                          {formatCurrency(tx.amount)}
+                        <TableCell align="right" sx={{ fontWeight: row.hasPaid ? 700 : 400, color: row.hasPaid ? '#08703A' : 'text.secondary' }}>
+                          {row.hasPaid ? formatCurrency(row.amount) : '-'}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </TableContainer>
-            </Box>
-          )}
+            </Paper>
+          </Grid2>
 
-          {/* --- TABELLE 3: AUSGABEN --- */}
-          <Box>
-            <Typography
-              variant="h6"
-              gutterBottom
-              sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-            >
-              <CancelIcon color="error" fontSize="small" /> Ausgaben (Kosten)
-            </Typography>
-            {expenseList.length === 0 ? (
-              <Paper
-                variant="outlined"
-                sx={{ p: 3, textAlign: 'center', color: 'text.secondary' }}
-              >
-                Keine Ausgaben für dieses Spiel verbucht.
+          <Grid2 size={{ xs: 12, md: 5 }}>
+            <Stack spacing={{ xs: 2, md: 2.5 }}>
+              {otherIncomeList.length > 0 && (
+                <Paper component="section" elevation={0} sx={sectionSx}>
+                  <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 1.75 }}>
+                    <SavingsIcon sx={{ color: '#229349', fontSize: { xs: 27, sm: 31 } }} />
+                    <Typography component="h2" sx={{ fontSize: { xs: '1.1rem', sm: '1.35rem' }, fontWeight: 800 }}>Sonstige Einnahmen</Typography>
+                  </Stack>
+                  <TableContainer sx={{ border: 1, borderColor: '#DCE8F8', borderRadius: 1.5, overflowX: 'auto' }}>
+                    <Table size="small" aria-label="Sonstige Einnahmen" sx={{ ...tableSx, minWidth: 330 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Beschreibung</TableCell>
+                          <TableCell>Kategorie</TableCell>
+                          <TableCell align="right">Betrag</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {otherIncomeList.map((tx) => (
+                          <TableRow key={tx.id}>
+                            <TableCell>{tx.description || 'Sonstiges'}</TableCell>
+                            <TableCell><Chip label={tx.category} size="small" variant="outlined" sx={{ height: 26, borderColor: '#60C67B', color: '#08703A' }} /></TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700, color: '#08703A' }}>{formatCurrency(tx.amount)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Paper>
+              )}
+
+              <Paper component="section" elevation={0} sx={sectionSx}>
+                <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 1.75 }}>
+                  <CancelIcon sx={{ color: '#E71928', fontSize: { xs: 27, sm: 31 } }} />
+                  <Typography component="h2" sx={{ fontSize: { xs: '1.1rem', sm: '1.35rem' }, fontWeight: 800 }}>Ausgaben (Kosten)</Typography>
+                </Stack>
+                {expenseList.length === 0 ? (
+                  <Box sx={{ p: 2, border: 1, borderColor: '#DCE8F8', borderRadius: 1.5, color: 'text.secondary' }}>
+                    Keine Ausgaben für dieses Spiel verbucht.
+                  </Box>
+                ) : (
+                  <TableContainer sx={{ border: 1, borderColor: '#DCE8F8', borderRadius: 1.5, overflowX: 'auto' }}>
+                    <Table size="small" aria-label="Ausgaben des Spiels" sx={{ ...tableSx, minWidth: 330 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Beschreibung</TableCell>
+                          <TableCell>Kategorie</TableCell>
+                          <TableCell align="right">Betrag</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {expenseList.map((tx) => (
+                          <TableRow key={tx.id}>
+                            <TableCell>{tx.description || '-'}</TableCell>
+                            <TableCell><Chip label={tx.category} size="small" variant="outlined" sx={{ height: 26, borderColor: '#CDD8E8', color: 'text.primary' }} /></TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700, color: '#D70F20' }}>- {formatCurrency(tx.amount)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
               </Paper>
-            ) : (
-              <TableContainer component={Paper} variant="outlined">
-                <Table size="small">
-                  <TableHead sx={{ bgcolor: '#f5f5f5' }}>
-                    <TableRow>
-                      <TableCell>
-                        <strong>Beschreibung</strong>
-                      </TableCell>
-                      <TableCell>
-                        <strong>Kategorie</strong>
-                      </TableCell>
-                      <TableCell align="right">
-                        <strong>Betrag</strong>
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {expenseList.map((tx) => (
-                      <TableRow key={tx.id} hover>
-                        <TableCell>{tx.description || '-'}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={tx.category}
-                            size="small"
-                            variant="outlined"
-                          />
-                        </TableCell>
-                        <TableCell
-                          align="right"
-                          sx={{ fontWeight: 'bold', color: 'error.main' }}
-                        >
-                          - {formatCurrency(tx.amount)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
-          </Box>
-        </Stack>
 
-        <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end' }}>
-          <Button
-            variant="contained"
-            color="error"
-            size="small"
-            startIcon={<DeleteIcon />}
-            onClick={handleDeleteAllTransactions}
-          >
-            Alle Transaktion zum Spiel Löschen
-          </Button>
-        </Box>
+              <Button
+                variant="contained"
+                color="error"
+                size="large"
+                fullWidth
+                startIcon={<DeleteIcon />}
+                onClick={handleDeleteAllTransactions}
+                sx={{ py: 1.25, fontWeight: 700, textTransform: 'none', borderRadius: 1.5 }}
+              >
+                Alle Transaktionen zum Spiel löschen
+              </Button>
+            </Stack>
+          </Grid2>
+        </Grid2>
 
         <Dialog
           open={deleteDialogOpen}
