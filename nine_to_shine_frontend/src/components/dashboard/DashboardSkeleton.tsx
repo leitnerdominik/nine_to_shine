@@ -37,36 +37,26 @@ export default function DashboardSkeleton() {
           }}
         />
 
-        <Box
+        <Skeleton
+          aria-hidden="true"
+          variant="rounded"
           sx={{
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: 'repeat(2, minmax(0, 1fr))',
-              md: '1fr',
-            },
-            gridAutoRows: '1fr',
-            gap: { xs: 1.5, sm: 2, md: 2.5 },
-            minWidth: 0,
             height: '100%',
-            '@media (max-width: 359.95px)': {
-              gridTemplateColumns: 'minmax(0, 1fr)',
-            },
+            minHeight: { xs: 150, sm: 170, md: 390 },
+            borderRadius: '18px',
           }}
-        >
-          {[0, 1].map((index) => (
-            <Skeleton
-              key={index}
-              aria-hidden="true"
-              variant="rounded"
-              sx={{
-                height: '100%',
-                minHeight: { xs: 150, sm: 170, md: 0 },
-                borderRadius: '18px',
-              }}
-            />
-          ))}
-        </Box>
+        />
       </Box>
+
+      <Skeleton
+        aria-hidden="true"
+        variant="rounded"
+        sx={{
+          mt: { xs: 1.5, sm: 2, md: 2.5 },
+          height: { xs: 260, sm: 270 },
+          borderRadius: '18px',
+        }}
+      />
     </Box>
   );
 }
