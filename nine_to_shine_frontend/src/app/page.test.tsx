@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/test-utils';
 import DashboardPage from './page';
@@ -7,14 +7,14 @@ import DashboardPage from './page';
 const mocks = vi.hoisted(() => ({
   getSeasons: vi.fn(),
   getTopRanked: vi.fn(),
-  getNextDuty: vi.fn(),
+  getDuties: vi.fn(),
   getDuesStatus: vi.fn(),
 }));
 
 vi.mock('@/definitions/commands', () => ({
   apiSeason: { getAll: mocks.getSeasons },
   apiRanking: { getTopRanked: mocks.getTopRanked },
-  apiOrganizerDuty: { getNextDuty: mocks.getNextDuty },
+  apiOrganizerDuty: { getAll: mocks.getDuties },
   apiFinance: { getDuesStatus: mocks.getDuesStatus },
 }));
 
@@ -39,7 +39,7 @@ describe('DashboardPage', () => {
     vi.clearAllMocks();
     mocks.getSeasons.mockResolvedValue([{ id: 5, seasonNumber: 7 }]);
     mocks.getTopRanked.mockResolvedValue(null);
-    mocks.getNextDuty.mockResolvedValue(null);
+    mocks.getDuties.mockResolvedValue([]);
     mocks.getDuesStatus.mockResolvedValue([]);
   });
 
@@ -73,8 +73,8 @@ describe('DashboardPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows the existing fallbacks after a dashboard request fails', async () => {
-    mocks.getDuesStatus.mockRejectedValueOnce(new Error('Request failed'));
+  it('shows unavailable months when the duty request fails', async () => {
+    mocks.getDuties.mockRejectedValueOnce(new Error('Request failed'));
 
     renderWithProviders(<DashboardPage />);
 
@@ -87,8 +87,13 @@ describe('DashboardPage', () => {
       ).not.toBeInTheDocument()
     );
     expect(screen.getByText('Noch keine Punkte')).toBeInTheDocument();
-    expect(screen.getByText('Nicht verfügbar')).toBeInTheDocument();
-    expect(screen.getByText('Frei!')).toBeInTheDocument();
+    expect(screen.getByText('Status konnte nicht geladen werden')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('listitem', { name: `Januar ${new Date().getFullYear()}` })).getByText(
+        'Nicht verfügbar'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText('Big Meeting')).toBeInTheDocument();
   });
 
   it('keeps the successful empty state when no season exists', async () => {
@@ -100,15 +105,21 @@ describe('DashboardPage', () => {
       await screen.findByRole('heading', { level: 1, name: 'Saison –' })
     ).toBeInTheDocument();
     expect(mocks.getTopRanked).toHaveBeenCalledWith(undefined);
-    expect(mocks.getNextDuty).toHaveBeenCalledTimes(1);
+    expect(mocks.getDuties).toHaveBeenCalledTimes(1);
     expect(mocks.getDuesStatus).not.toHaveBeenCalled();
     expect(screen.getByText('Noch keine Punkte')).toBeInTheDocument();
     expect(screen.getByText('Alles bezahlt')).toBeInTheDocument();
     expect(screen.getByText('Keine offenen Spielbeiträge')).toBeInTheDocument();
-    expect(screen.getByText('Frei!')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('listitem', { name: `Januar ${new Date().getFullYear()}` })).getByText(
+        'Offen'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText('Frei')).toBeInTheDocument();
   });
 
-  it('uses the highest season and preserves summary navigation', async () => {
+  it('uses the highest season and current year for organizer names', async () => {
+    const year = new Date().getFullYear();
     mocks.getSeasons.mockResolvedValue([
       { id: 3, seasonNumber: 3 },
       { id: 9, seasonNumber: 9 },
@@ -119,16 +130,34 @@ describe('DashboardPage', () => {
       userDisplayName: 'Dominik Leitner',
       totalPoints: 128,
     });
-    mocks.getNextDuty.mockResolvedValue({
-      id: 4,
-      dutyDate: '2026-10-01T00:00:00.000Z',
-      userId: 15,
-      userDisplayName: 'Florian',
-      seasonId: 9,
-      seasonDisplayNumber: 9,
-      isSkipped: false,
+    const duty = (
+      id: number,
+      month: string,
+      userDisplayName: string,
+      seasonId = 9,
+      isSkipped = false
+    ) => ({
+      id,
+      dutyDate: `${month}-01T00:00:00.000Z`,
+      userId: id,
+      userDisplayName,
+      seasonId,
+      seasonDisplayNumber: seasonId,
+      isSkipped,
       isManualOverride: false,
     });
+    mocks.getDuties.mockResolvedValue([
+      duty(1, `${year}-01`, 'Anna Maria'),
+      duty(2, `${year}-01`, 'Florian'),
+      duty(3, `${year}-02`, 'Skipped Member', 9, true),
+      duty(4, `${year}-03`, 'Other Season', 3),
+      duty(5, `${year - 1}-04`, 'Other Year'),
+      duty(9, `${year}-06`, 'Skipped Organizer', 9, true),
+      duty(10, `${year}-06`, 'Remaining Organizer'),
+      duty(6, `${year}-10`, 'October Organizer'),
+      duty(7, `${year}-11`, 'November Organizer'),
+      duty(8, `${year}-12`, 'December Organizer'),
+    ]);
 
     renderWithProviders(<DashboardPage />);
 
@@ -141,6 +170,7 @@ describe('DashboardPage', () => {
     await waitFor(() => {
       expect(mocks.getTopRanked).toHaveBeenCalledWith(9);
       expect(mocks.getDuesStatus).toHaveBeenCalledWith(9);
+      expect(mocks.getDuties).toHaveBeenCalledTimes(1);
     });
 
     expect(screen.getByText('Dominik Leitner').closest('a')).toHaveAttribute(
@@ -148,11 +178,63 @@ describe('DashboardPage', () => {
       '/rankings'
     );
     expect(screen.getByText('128 Punkte')).toBeInTheDocument();
-    expect(screen.getByText('Florian').closest('a')).toHaveAttribute(
-      'href',
-      '/organizer-duties'
-    );
-    expect(screen.getByText('für Oktober 2026')).toBeInTheDocument();
+    const january = screen.getByRole('listitem', { name: `Januar ${year}` });
+    expect(within(january).getByText('Anna Maria, Florian')).toBeInTheDocument();
+    expect(within(january).getByText('AM')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('listitem', { name: `Februar ${year}` })).getByText(
+        'Entfällt'
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('listitem', { name: `März ${year}` })).getByText(
+        'Offen'
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('listitem', { name: `April ${year}` })).getByText(
+        'Offen'
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('listitem', { name: `Juni ${year}` })).getByText(
+        'Remaining Organizer'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText('Big Meeting')).toBeInTheDocument();
+    expect(screen.getByText('N2S+1')).toBeInTheDocument();
+    expect(screen.getByText('Frei')).toBeInTheDocument();
+    expect(screen.queryByText('October Organizer')).not.toBeInTheDocument();
+    expect(screen.queryByText('November Organizer')).not.toBeInTheDocument();
+    expect(screen.queryByText('December Organizer')).not.toBeInTheDocument();
+    const timelineLink = screen.getByRole('link', {
+      name: `Wer organisiert wann? ${year} öffnen`,
+    });
+    expect(timelineLink).toHaveAttribute('href', '/organizer-duties');
+    expect(timelineLink).toContainElement(january);
+    expect(screen.getByRole('heading', { level: 2, name: 'Wer organisiert wann?' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Organisieren' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')).toHaveLength(12);
+  });
+
+  it('shows unassigned months without implying a duty loading failure', async () => {
+    const year = new Date().getFullYear();
+    renderWithProviders(<DashboardPage />);
+
+    await screen.findByRole('heading', {
+      level: 1,
+      name: `Saison 7 · ${year}`,
+    });
+    expect(
+      within(screen.getByRole('listitem', { name: `September ${year}` })).getByText(
+        'Offen'
+      )
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('listitem', { name: `Dezember ${year}` })).getByText(
+        'Frei'
+      )
+    ).toBeInTheDocument();
   });
 
   it('shows the current-season open count and links to the overview', async () => {

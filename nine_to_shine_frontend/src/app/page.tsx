@@ -19,6 +19,7 @@ import type {
 } from '@/definitions/types';
 import { useSnackbar } from 'notistack';
 import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton';
+import DashboardTimeline from '@/components/dashboard/DashboardTimeline';
 import { routes } from '@/common/routes';
 import {
   DashboardLeaderCard,
@@ -32,7 +33,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const [topPlayer, setTopPlayer] = useState<TopRankedDto | null>(null);
-  const [nextDuty, setNextDuty] = useState<OrganizerDutyDto | null>(null);
+  const [duties, setDuties] = useState<OrganizerDutyDto[] | null>(null);
+  const [currentSeasonId, setCurrentSeasonId] = useState<number | null>(null);
   const [currentSeasonNumber, setCurrentSeasonNumber] = useState<number | null>(
     null
   );
@@ -50,18 +52,19 @@ export default function DashboardPage() {
         const currentSeason = [...seasons].sort(
           (a, b) => b.seasonNumber - a.seasonNumber
         )[0];
+        setCurrentSeasonId(currentSeason?.id ?? null);
         setCurrentSeasonNumber(currentSeason?.seasonNumber || null);
 
         const [topData, dutyData, duesData] = await Promise.all([
           apiRanking.getTopRanked(currentSeason?.id),
-          apiOrganizerDuty.getNextDuty(),
+          apiOrganizerDuty.getAll(),
           currentSeason
             ? apiFinance.getDuesStatus(currentSeason.id)
             : Promise.resolve([] as GameDuesStatusDto[]),
         ]);
 
         setTopPlayer(topData);
-        setNextDuty(dutyData);
+        setDuties(dutyData);
         setOpenDuesCount(
           duesData.reduce(
             (total, game) => total + game.unpaidMembers.length,
@@ -72,9 +75,7 @@ export default function DashboardPage() {
           duesData.filter((game) => game.unpaidMembers.length > 0).length
         );
       } catch {
-        enqueueSnackbar('Fehler beim Laden des Dashboards', {
-              variant: 'error',
-            });
+        enqueueSnackbar('Fehler beim Laden des Dashboards', { variant: 'error' });
       } finally {
         setLoading(false);
       }
@@ -126,21 +127,7 @@ export default function DashboardPage() {
             href={routes.rankings}
           />
 
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: {
-                xs: 'repeat(2, minmax(0, 1fr))',
-                md: '1fr',
-              },
-              gridAutoRows: '1fr',
-              gap: { xs: 1.5, sm: 2, md: 2.5 },
-              minWidth: 0,
-              '@media (max-width: 359.95px)': {
-                gridTemplateColumns: 'minmax(0, 1fr)',
-              },
-            }}
-          >
+          <Box sx={{ minWidth: 0 }}>
             <DashboardStatusCard
               label="OFFENE SPIELBEITRÄGE"
               value={
@@ -162,19 +149,16 @@ export default function DashboardPage() {
               href={routes.duesOverview}
               tone={duesTone}
             />
-
-            <DashboardStatusCard
-              label="NÄCHSTER ZU ORGANISIEREN"
-              value={nextDuty ? nextDuty.userDisplayName ?? '-' : 'Frei!'}
-              detail={
-                nextDuty
-                  ? `für ${dayjs(nextDuty.dutyDate).format('MMMM YYYY')}`
-                  : 'Keiner Eingetragen!'
-              }
-              href={routes.organizeduties}
-              tone="info"
-            />
           </Box>
+        </Box>
+
+        <Box sx={{ mt: { xs: 1.5, sm: 2, md: 2.5 } }}>
+          <DashboardTimeline
+            duties={duties}
+            seasonId={currentSeasonId}
+            year={dayjs().year()}
+            href={routes.organizeduties}
+          />
         </Box>
       </Box>
     </Layout>
