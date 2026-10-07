@@ -120,12 +120,12 @@ export default function AppNavigation({ user }: AppNavigationProps) {
       <AppBar
         position="fixed"
         color="inherit"
-        elevation={0}
+        elevation={1}
         sx={{
-          bgcolor: 'background.paper',
+          bgcolor: '#0279fa',
           borderBottom: 1,
-          borderColor: 'divider',
-          color: 'text.primary',
+          borderColor: 'primary.dark',
+          color: 'common.white',
         }}
       >
         <Toolbar
@@ -149,11 +149,11 @@ export default function AppNavigation({ user }: AppNavigationProps) {
               alignItems: 'center',
               gap: 0.5,
               width: 'fit-content',
-              color: 'text.primary',
+              color: 'inherit',
               textDecoration: 'none',
               '&:focus-visible': {
                 outline: '3px solid',
-                outlineColor: 'primary.main',
+                outlineColor: 'common.white',
                 outlineOffset: 4,
                 borderRadius: 1,
               },
@@ -206,18 +206,18 @@ export default function AppNavigation({ user }: AppNavigationProps) {
                       px: { md: 1.5, lg: 2 },
                       py: 1.25,
                       borderRadius: 2,
-                      color: active ? 'primary.contrastText' : 'text.primary',
-                      bgcolor: active ? 'primary.main' : 'transparent',
+                      color: 'common.white',
+                      bgcolor: active ? '#1695fd' : 'transparent',
                       fontWeight: 700,
                       textTransform: 'none',
                       whiteSpace: 'nowrap',
                       boxShadow: active ? 1 : 'none',
                       '&:hover': {
-                        bgcolor: active ? 'primary.dark' : 'action.hover',
+                        bgcolor: '#1695fd',
                       },
                       '&.Mui-focusVisible': {
                         outline: '3px solid',
-                        outlineColor: 'primary.light',
+                        outlineColor: 'common.white',
                         outlineOffset: 2,
                       },
                     }}
@@ -237,7 +237,14 @@ export default function AppNavigation({ user }: AppNavigationProps) {
                 aria-haspopup="menu"
                 aria-expanded={accountMenuOpen ? 'true' : undefined}
                 onClick={(event) => setAccountMenuAnchor(event.currentTarget)}
-                sx={{ p: 0.5 }}
+                sx={{
+                  p: 0.5,
+                  '&.Mui-focusVisible': {
+                    outline: '3px solid',
+                    outlineColor: 'common.white',
+                    outlineOffset: 2,
+                  },
+                }}
               >
                 <Avatar
                   sx={{
@@ -297,14 +304,15 @@ export default function AppNavigation({ user }: AppNavigationProps) {
             left: 0,
             zIndex: (theme) => theme.zIndex.appBar,
             pb: 'env(safe-area-inset-bottom)',
+            bgcolor: '#0279fa',
             borderTop: 1,
-            borderColor: 'divider',
+            borderColor: 'primary.dark',
           }}
         >
           <BottomNavigation
             showLabels
             value={activePrimaryPath}
-            sx={{ height: 72, px: 0.5, bgcolor: 'background.paper' }}
+            sx={{ height: 72, px: 0.5, bgcolor: '#0279fa' }}
           >
             {primaryNavigationItems.map((item) => {
               const active = isRouteActive(pathname, item.path);
@@ -324,15 +332,18 @@ export default function AppNavigation({ user }: AppNavigationProps) {
                     px: 0.25,
                     py: 0.5,
                     borderRadius: 2,
-                    color: 'text.secondary',
+                    color: 'common.white',
                     '& .MuiBottomNavigationAction-label': {
                       fontSize: '0.65rem',
                       fontWeight: 600,
                       whiteSpace: 'nowrap',
                     },
                     '&.Mui-selected': {
-                      bgcolor: 'primary.main',
-                      color: 'primary.contrastText',
+                      bgcolor: '#1695fd',
+                      color: 'common.white',
+                    },
+                    '&:hover': {
+                      bgcolor: '#1695fd',
                     },
                     '&.Mui-selected .MuiBottomNavigationAction-label': {
                       fontSize: '0.65rem',
@@ -340,7 +351,7 @@ export default function AppNavigation({ user }: AppNavigationProps) {
                     },
                     '&.Mui-focusVisible': {
                       outline: '3px solid',
-                      outlineColor: 'primary.light',
+                      outlineColor: 'common.white',
                       outlineOffset: -2,
                     },
                   }}
