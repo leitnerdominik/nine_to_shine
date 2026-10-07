@@ -8,7 +8,7 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/',
     display: 'standalone',
     background_color: '#0496FF',
-    theme_color: '#0496FF',
+    theme_color: '#0279fa',
     icons: [
       {
         src: '/android-chrome-192x192.png',
