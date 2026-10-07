@@ -20,21 +20,18 @@ const infoCards = [
     description: 'Alle Vergehen, Beträge und Bemerkungen im Überblick.',
     href: routes.punishment,
     icon: <GavelIcon />,
-    featured: true,
   },
   {
     title: 'Chronik',
     description: 'Protokolle und Erinnerungen vergangener Treffen.',
     href: routes.chronikEntries,
     icon: <HistoryEduIcon />,
-    featured: false,
   },
   {
     title: 'Verfassung',
     description: 'Rollen, Aufgaben und Regeln des Vereins.',
     href: routes.constitution,
     icon: <PolicyIcon />,
-    featured: false,
   },
 ];
 
@@ -58,10 +55,8 @@ export default function ChronikPage() {
               elevation={0}
               sx={{
                 borderRadius: '20px',
-                background: card.featured
-                  ? 'linear-gradient(110deg, #006FFF 0%, #2498FF 100%)'
-                  : 'linear-gradient(110deg, #E8F3FF 0%, #EDF5FF 100%)',
-                color: card.featured ? 'primary.contrastText' : 'text.primary',
+                background: 'linear-gradient(110deg, #E8F3FF 0%, #EDF5FF 100%)',
+                color: 'text.primary',
                 transition: 'transform 150ms ease, box-shadow 150ms ease',
                 '@media (hover: hover) and (pointer: fine)': {
                   '&:hover': {
@@ -91,9 +86,7 @@ export default function ChronikPage() {
                   p: { xs: 2.5, md: 3.75 },
                   '&.Mui-focusVisible, &:focus-visible': {
                     outline: '3px solid',
-                    outlineColor: card.featured
-                      ? 'primary.contrastText'
-                      : 'text.primary',
+                    outlineColor: 'text.primary',
                     outlineOffset: -5,
                   },
                 }}
@@ -105,15 +98,10 @@ export default function ChronikPage() {
                     gridRow: 1,
                     width: { xs: 64, md: 100 },
                     height: { xs: 64, md: 100 },
-                    borderRadius: card.featured ? '24%' : '50%',
+                    borderRadius: '50%',
                     display: 'grid',
                     placeItems: 'center',
-                    bgcolor: card.featured
-                      ? 'rgba(255, 255, 255, 0.22)'
-                      : undefined,
-                    background: card.featured
-                      ? undefined
-                      : 'linear-gradient(145deg, #2498FF 0%, #0075FF 100%)',
+                    background: 'linear-gradient(145deg, #2498FF 0%, #0075FF 100%)',
                     color: 'primary.contrastText',
                     '& .MuiSvgIcon-root': {
                       fontSize: { xs: 32, md: 48 },
@@ -144,7 +132,7 @@ export default function ChronikPage() {
                     sx={{
                       mt: 0.75,
                       maxWidth: 380,
-                      color: card.featured ? 'inherit' : 'text.secondary',
+                      color: 'text.secondary',
                       fontSize: { xs: '1rem', md: '1.25rem' },
                       lineHeight: 1.4,
                     }}
@@ -158,7 +146,7 @@ export default function ChronikPage() {
                     gridColumn: { xs: 2, md: 3 },
                     gridRow: { xs: 2, md: 1 },
                     fontSize: { xs: 32, md: 40 },
-                    color: card.featured ? 'inherit' : '#0075FF',
+                    color: '#0075FF',
                   }}
                 />
               </CardActionArea>
