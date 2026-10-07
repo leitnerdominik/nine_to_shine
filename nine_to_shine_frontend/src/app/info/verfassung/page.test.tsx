@@ -1,5 +1,5 @@
 import React from 'react';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/test-utils';
 import ConstitutionPage from './page';
@@ -75,8 +75,7 @@ describe('Verfassung page', () => {
         'Möge der Geist von Frohsinn, Freundschaft und Männerehre unseren Bund stets leiten.'
       )
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('table', { name: 'Strafenkatalog' })
-    ).toBeInTheDocument();
+    const catalog = screen.getByRole('list', { name: 'Strafenkatalog' });
+    expect(within(catalog).getAllByRole('listitem')).toHaveLength(9);
   });
 });

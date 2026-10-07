@@ -6,25 +6,43 @@ import PunishmentTable from './PunishmentTable';
 import { punishmentRules } from './punishment-data';
 
 describe('PunishmentTable', () => {
-  it('renders every punishment with all three columns', () => {
+  it('renders every rule in order with its amount and remark', () => {
     renderWithProviders(<PunishmentTable />);
 
-    const table = screen.getByRole('table', { name: 'Strafenkatalog' });
-    const rows = within(table).getAllByRole('row');
+    const list = screen.getByRole('list', { name: 'Strafenkatalog' });
+    const items = within(list).getAllByRole('listitem');
 
-    expect(rows).toHaveLength(punishmentRules.length + 1);
-    expect(within(rows[0]).getAllByRole('columnheader')).toHaveLength(3);
-    expect(within(rows[0]).getByText('Vergehen')).toBeInTheDocument();
-    expect(within(rows[0]).getByText('Betrag')).toBeInTheDocument();
-    expect(within(rows[0]).getByText('Bemerkung')).toBeInTheDocument();
+    expect(items).toHaveLength(9);
 
     punishmentRules.forEach((punishment, index) => {
-      const cells = within(rows[index + 1]).getAllByRole('cell');
+      const item = within(items[index]);
 
-      expect(cells).toHaveLength(3);
-      expect(cells[0]).toHaveTextContent(punishment.vergehen);
-      expect(cells[1]).toHaveTextContent(`${punishment.betrag} €`);
-      expect(cells[2]).toHaveTextContent(punishment.bemerkung);
+      expect(item.getByText(punishment.vergehen)).toBeInTheDocument();
+      expect(item.getByText(`${punishment.betrag} €`)).toBeInTheDocument();
+      if (punishment.bemerkung) {
+        expect(item.getByText(punishment.bemerkung)).toBeInTheDocument();
+      }
     });
+  });
+
+  it('keeps the explanations attached to both zero-euro rules', () => {
+    renderWithProviders(<PunishmentTable />);
+
+    const items = within(
+      screen.getByRole('list', { name: 'Strafenkatalog' })
+    ).getAllByRole('listitem');
+    const specialOccurrence = items.find((item) =>
+      within(item).queryByText('Besondere Vorkommnisse')
+    );
+    const overduePenalty = items.find((item) =>
+      within(item).queryByText('Strafen nicht in der Frist zahlen')
+    );
+
+    expect(specialOccurrence).toBeDefined();
+    expect(overduePenalty).toBeDefined();
+    expect(specialOccurrence).toHaveTextContent('0 €');
+    expect(specialOccurrence).toHaveTextContent('Betrag entscheidet die Gruppe');
+    expect(overduePenalty).toHaveTextContent('0 €');
+    expect(overduePenalty).toHaveTextContent('Verdoppelung der Strafe');
   });
 });

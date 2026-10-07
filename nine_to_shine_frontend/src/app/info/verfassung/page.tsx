@@ -80,7 +80,7 @@ function RoleSection({ title, duties }: RoleSectionProps) {
       <Typography
         component="h3"
         variant="h6"
-        color="primary.main"
+        color="text.primary"
         fontWeight={700}
       >
         {title}
@@ -193,7 +193,7 @@ function FullConstitution() {
             id="introduction-heading"
             component="h3"
             variant="h6"
-            color="primary.main"
+            color="text.primary"
             fontWeight={700}
             gutterBottom
           >
@@ -216,7 +216,7 @@ function FullConstitution() {
                 id={`${section.id}-heading`}
                 component="h3"
                 variant="h6"
-                color="primary.main"
+                color="text.primary"
                 fontWeight={700}
                 gutterBottom
               >
@@ -240,7 +240,7 @@ function FullConstitution() {
                 <Typography
                   component="h4"
                   variant="subtitle1"
-                  color="primary.main"
+                  color="text.primary"
                   fontWeight={700}
                   sx={{ mt: 2.5, mb: 0.5 }}
                 >

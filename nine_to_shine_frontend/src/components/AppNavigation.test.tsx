@@ -60,7 +60,7 @@ describe('AppNavigation', () => {
       ['Rangliste', '/rankings'],
       ['Organisieren', '/organizer-duties'],
       ['Finanzen', '/finance'],
-      ['Informationen', '/info'],
+      ['Info', '/info'],
     ];
 
     for (const [name, href] of expectedLinks) {
