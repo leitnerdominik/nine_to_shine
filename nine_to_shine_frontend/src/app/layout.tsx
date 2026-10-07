@@ -1,3 +1,5 @@
+import type { Viewport } from 'next';
+
 import AuthGuard from '@/components/AuthGuard';
 import ClientSnackbarProvider from '@/components/ClientSnackbarProvider';
 import ClientThemenProvider from '@/components/ClientThemenProvider';
@@ -6,6 +8,10 @@ import HealthCheckPoller from '@/components/HealthCheckPoller';
 export const metadata = {
   title: 'nine to shine',
   description: 'this group has a name now :)',
+};
+
+export const viewport: Viewport = {
+  themeColor: '#0279fa',
 };
 
 export default function RootLayout({
