@@ -54,7 +54,7 @@ const primaryNavigationItems: PrimaryNavigationItem[] = [
     icon: <CleaningServicesIcon />,
   },
   { label: 'Finanzen', path: routes.finances, icon: <EuroIcon /> },
-  { label: 'Informationen', path: routes.info, icon: <InfoOutlinedIcon /> },
+  { label: 'Info', path: routes.info, icon: <InfoOutlinedIcon /> },
 ];
 
 function isRouteActive(pathname: string, path: string) {
