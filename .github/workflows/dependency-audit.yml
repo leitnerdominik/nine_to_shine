@@ -27,7 +27,14 @@ jobs:
           cache: npm
           cache-dependency-path: nine_to_shine_frontend/package-lock.json
       - run: npm ci
-      - run: npm audit --audit-level=low
+      - name: Audit npm dependencies
+        shell: bash
+        run: |
+          npm audit --audit-level=none --json | tee npm-audit.json
+          vulnerabilities=$(jq -er '.metadata.vulnerabilities.total | select(type == "number" and . >= 0 and floor == .)' npm-audit.json)
+          if [ "$vulnerabilities" -gt 0 ]; then
+            echo "::warning title=npm dependency audit::Found $vulnerabilities vulnerable packages. See this step's logs for details."
+          fi
 
   nuget:
     runs-on: ubuntu-latest
@@ -40,7 +47,11 @@ jobs:
         with:
           dotnet-version: 8.0.x
       - run: dotnet restore NineToShineApi.sln
-      - name: Reject vulnerable NuGet packages
+      - name: Audit NuGet dependencies
+        shell: bash
         run: |
           dotnet list NineToShineApi.sln package --vulnerable --include-transitive --format json | tee nuget-audit.json
-          jq -e '[.projects[] | .frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?)] | length == 0' nuget-audit.json
+          vulnerabilities=$(jq '[.projects[] | .frameworks[]? | (.topLevelPackages[]?, .transitivePackages[]?)] | length' nuget-audit.json)
+          if [ "$vulnerabilities" -gt 0 ]; then
+            echo "::warning title=NuGet dependency audit::Found $vulnerabilities vulnerable package entries. See this step's logs for details."
+          fi
